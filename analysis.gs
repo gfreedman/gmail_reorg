@@ -10,35 +10,43 @@
 // ============================================================================
 
 /**
- * Common patterns to detect label categories
- * These are used to suggest organization structure
+ * Common patterns to detect label categories.
+ * These are used to suggest organization structure based on label names.
  */
-var CATEGORY_PATTERNS = {
-  work: {
+var CATEGORY_PATTERNS =
+{
+  work:
+  {
     keywords: ['work', 'job', 'office', 'client', 'project', 'meeting', 'team', 'company', 'business', 'corporate', 'enterprise', 'hr', 'payroll', 'colleague'],
     domains: ['slack', 'jira', 'asana', 'trello', 'notion', 'confluence', 'teams']
   },
-  finance: {
+  finance:
+  {
     keywords: ['bank', 'finance', 'money', 'payment', 'invoice', 'receipt', 'tax', 'investment', 'stock', 'crypto', 'paypal', 'venmo', 'zelle', 'billing', 'subscription'],
     domains: ['paypal', 'venmo', 'chase', 'wellsfargo', 'bankofamerica', 'citi', 'capitalone', 'amex', 'stripe', 'square']
   },
-  personal: {
+  personal:
+  {
     keywords: ['personal', 'family', 'friend', 'home', 'pet', 'hobby', 'health', 'doctor', 'medical', 'fitness', 'gym'],
     domains: ['facebook', 'instagram', 'twitter', 'linkedin', 'whatsapp']
   },
-  shopping: {
+  shopping:
+  {
     keywords: ['order', 'shipping', 'delivery', 'purchase', 'shop', 'store', 'buy', 'cart', 'return', 'refund'],
     domains: ['amazon', 'ebay', 'etsy', 'walmart', 'target', 'bestbuy', 'shopify']
   },
-  travel: {
+  travel:
+  {
     keywords: ['travel', 'flight', 'hotel', 'booking', 'trip', 'vacation', 'airline', 'airport', 'reservation'],
     domains: ['airbnb', 'expedia', 'booking', 'kayak', 'tripadvisor', 'united', 'delta', 'southwest', 'american']
   },
-  learning: {
+  learning:
+  {
     keywords: ['course', 'learn', 'education', 'school', 'university', 'class', 'training', 'tutorial', 'certification', 'study'],
     domains: ['coursera', 'udemy', 'edx', 'skillshare', 'linkedin', 'pluralsight', 'codecademy']
   },
-  newsletters: {
+  newsletters:
+  {
     keywords: ['newsletter', 'digest', 'weekly', 'daily', 'update', 'subscribe', 'unsubscribe'],
     domains: ['substack', 'mailchimp', 'convertkit', 'buttondown']
   }
@@ -49,9 +57,11 @@ var CATEGORY_PATTERNS = {
 // ============================================================================
 
 /**
- * Analyze current label structure and provide comprehensive insights
+ * Analyze current label structure and provide comprehensive insights.
+ * This is the main entry point for understanding your Gmail organization.
  */
-function analyzeLabelStructure() {
+function analyzeLabelStructure()
+{
   log('=== GMAIL LABEL ANALYSIS ===');
 
   var labels = GmailApp.getUserLabels();
@@ -76,24 +86,34 @@ function analyzeLabelStructure() {
 }
 
 /**
- * Collect detailed data for all labels
+ * Collect detailed data for all labels.
+ * Gathers name, thread count, nesting level, and suggested category.
+ *
  * @param {GmailLabel[]} labels - Array of Gmail labels
  * @return {Array} Array of label data objects
  */
-function collectLabelData(labels) {
+function collectLabelData(labels)
+{
   var labelData = [];
 
   log('Collecting data for ' + labels.length + ' labels...');
 
-  for (var i = 0; i < labels.length; i++) {
+  for (var i = 0; i < labels.length; i++)
+  {
     var label = labels[i];
     var name = label.getName();
     var threadCount = getThreadCountForLabel(label);
+
+    // Calculate nesting level by counting slashes
     var level = (name.match(/\//g) || []).length;
+
+    // Extract parent label (everything before last slash)
     var parent = name.indexOf('/') > -1 ? name.substring(0, name.lastIndexOf('/')) : null;
+
+    // Get the base name (last segment after slash)
     var baseName = name.split('/').pop().toLowerCase();
 
-    // Detect category
+    // Detect category based on keywords
     var category = detectCategory(baseName);
 
     labelData.push({
@@ -110,24 +130,31 @@ function collectLabelData(labels) {
 }
 
 /**
- * Detect likely category for a label based on patterns
+ * Detect likely category for a label based on keyword patterns.
+ *
  * @param {string} labelName - Label name (lowercase)
- * @return {string|null} Detected category or null
+ * @return {string|null} Detected category or null if no match
  */
-function detectCategory(labelName) {
-  for (var category in CATEGORY_PATTERNS) {
+function detectCategory(labelName)
+{
+  for (var category in CATEGORY_PATTERNS)
+  {
     var patterns = CATEGORY_PATTERNS[category];
 
     // Check keywords
-    for (var i = 0; i < patterns.keywords.length; i++) {
-      if (labelName.indexOf(patterns.keywords[i]) > -1) {
+    for (var i = 0; i < patterns.keywords.length; i++)
+    {
+      if (labelName.indexOf(patterns.keywords[i]) > -1)
+      {
         return category;
       }
     }
 
     // Check domains
-    for (var i = 0; i < patterns.domains.length; i++) {
-      if (labelName.indexOf(patterns.domains[i]) > -1) {
+    for (var i = 0; i < patterns.domains.length; i++)
+    {
+      if (labelName.indexOf(patterns.domains[i]) > -1)
+      {
         return category;
       }
     }
@@ -141,15 +168,22 @@ function detectCategory(labelName) {
 // ============================================================================
 
 /**
- * Display top labels by thread count
+ * Display top labels by thread count.
+ * Helps identify where most of your email is categorized.
+ *
+ * @param {Array} labelData - Label data array
  */
-function displayTopLabels(labelData) {
-  var sorted = labelData.slice().sort(function(a, b) {
+function displayTopLabels(labelData)
+{
+  // Sort by thread count descending
+  var sorted = labelData.slice().sort(function(a, b)
+  {
     return b.threadCount - a.threadCount;
   });
 
   Logger.log('=== TOP 20 LABELS BY THREAD COUNT ===');
-  for (var i = 0; i < Math.min(20, sorted.length); i++) {
+  for (var i = 0; i < Math.min(20, sorted.length); i++)
+  {
     var label = sorted[i];
     var categoryTag = label.suggestedCategory ? ' [' + label.suggestedCategory + ']' : '';
     Logger.log('  ' + label.threadCount + ' threads: ' + label.name + categoryTag);
@@ -158,12 +192,25 @@ function displayTopLabels(labelData) {
 }
 
 /**
- * Display label hierarchy analysis
+ * Display label hierarchy analysis.
+ * Shows distribution of root vs nested labels.
+ *
+ * @param {Array} labelData - Label data array
  */
-function displayLabelHierarchy(labelData) {
-  var rootLabels = labelData.filter(function(l) { return l.level === 0; });
-  var nestedLabels = labelData.filter(function(l) { return l.level > 0; });
-  var deepLabels = labelData.filter(function(l) { return l.level >= 2; });
+function displayLabelHierarchy(labelData)
+{
+  var rootLabels = labelData.filter(function(l)
+  {
+    return l.level === 0;
+  });
+  var nestedLabels = labelData.filter(function(l)
+  {
+    return l.level > 0;
+  });
+  var deepLabels = labelData.filter(function(l)
+  {
+    return l.level >= 2;
+  });
 
   Logger.log('=== HIERARCHY ANALYSIS ===');
   Logger.log('Root-level labels: ' + rootLabels.length);
@@ -171,15 +218,20 @@ function displayLabelHierarchy(labelData) {
   Logger.log('Deeply nested (3+ levels): ' + deepLabels.length);
   Logger.log('');
 
-  if (rootLabels.length > 15) {
+  // Warn if too many root labels
+  if (rootLabels.length > 15)
+  {
     Logger.log('WARNING: You have many root-level labels (' + rootLabels.length + ')');
     Logger.log('Consider consolidating into 5-10 top-level categories.');
     Logger.log('');
   }
 
-  if (deepLabels.length > 0) {
+  // Show deeply nested labels
+  if (deepLabels.length > 0)
+  {
     Logger.log('=== DEEPLY NESTED LABELS ===');
-    for (var i = 0; i < deepLabels.length; i++) {
+    for (var i = 0; i < deepLabels.length; i++)
+    {
       Logger.log('  ' + deepLabels[i].name + ' (' + deepLabels[i].threadCount + ' threads)');
     }
     Logger.log('');
@@ -187,15 +239,23 @@ function displayLabelHierarchy(labelData) {
 }
 
 /**
- * Display empty labels
+ * Display empty labels that could be cleaned up.
+ *
+ * @param {Array} labelData - Label data array
  */
-function displayEmptyLabels(labelData) {
-  var emptyLabels = labelData.filter(function(l) { return l.threadCount === 0; });
+function displayEmptyLabels(labelData)
+{
+  var emptyLabels = labelData.filter(function(l)
+  {
+    return l.threadCount === 0;
+  });
 
-  if (emptyLabels.length > 0) {
+  if (emptyLabels.length > 0)
+  {
     Logger.log('=== EMPTY LABELS (' + emptyLabels.length + ') ===');
     Logger.log('These labels have no emails and could be deleted:');
-    for (var i = 0; i < emptyLabels.length; i++) {
+    for (var i = 0; i < emptyLabels.length; i++)
+    {
       Logger.log('  ' + emptyLabels[i].name);
     }
     Logger.log('');
@@ -206,28 +266,38 @@ function displayEmptyLabels(labelData) {
 }
 
 /**
- * Display potential duplicate labels
+ * Display potential duplicate labels (similar names).
+ *
+ * @param {Array} labelData - Label data array
  */
-function displayPotentialDuplicates(labelData) {
+function displayPotentialDuplicates(labelData)
+{
   var duplicates = [];
   var seen = {};
 
-  for (var i = 0; i < labelData.length; i++) {
+  // Normalize names by removing non-alphanumeric chars
+  for (var i = 0; i < labelData.length; i++)
+  {
     var normalized = labelData[i].baseName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (seen[normalized]) {
+    if (seen[normalized])
+    {
       duplicates.push({
         label1: seen[normalized],
         label2: labelData[i].name
       });
-    } else {
+    }
+    else
+    {
       seen[normalized] = labelData[i].name;
     }
   }
 
-  if (duplicates.length > 0) {
+  if (duplicates.length > 0)
+  {
     Logger.log('=== POTENTIAL DUPLICATES ===');
     Logger.log('These labels have similar names and might be consolidated:');
-    for (var i = 0; i < duplicates.length; i++) {
+    for (var i = 0; i < duplicates.length; i++)
+    {
       Logger.log('  "' + duplicates[i].label1 + '" and "' + duplicates[i].label2 + '"');
     }
     Logger.log('');
@@ -235,26 +305,36 @@ function displayPotentialDuplicates(labelData) {
 }
 
 /**
- * Suggest labels that could be consolidated
+ * Suggest labels that could be consolidated.
+ * Finds parents with single children and low-usage labels.
+ *
+ * @param {Array} labelData - Label data array
  */
-function suggestConsolidations(labelData) {
+function suggestConsolidations(labelData)
+{
   Logger.log('=== CONSOLIDATION SUGGESTIONS ===');
 
-  // Find parents with only one child
+  // Group labels by parent
   var parentGroups = {};
-  for (var i = 0; i < labelData.length; i++) {
+  for (var i = 0; i < labelData.length; i++)
+  {
     var label = labelData[i];
-    if (label.parent) {
-      if (!parentGroups[label.parent]) {
+    if (label.parent)
+    {
+      if (!parentGroups[label.parent])
+      {
         parentGroups[label.parent] = [];
       }
       parentGroups[label.parent].push(label);
     }
   }
 
+  // Find parents with only one child (could be flattened)
   var singleChildParents = [];
-  for (var parent in parentGroups) {
-    if (parentGroups[parent].length === 1) {
+  for (var parent in parentGroups)
+  {
+    if (parentGroups[parent].length === 1)
+    {
       singleChildParents.push({
         parent: parent,
         child: parentGroups[parent][0].name
@@ -262,25 +342,31 @@ function suggestConsolidations(labelData) {
     }
   }
 
-  if (singleChildParents.length > 0) {
+  if (singleChildParents.length > 0)
+  {
     Logger.log('Labels with only one child (could be flattened):');
-    for (var i = 0; i < singleChildParents.length; i++) {
+    for (var i = 0; i < singleChildParents.length; i++)
+    {
       Logger.log('  "' + singleChildParents[i].parent + '" -> "' + singleChildParents[i].child + '"');
     }
     Logger.log('');
   }
 
   // Find labels with very few threads
-  var lowUsage = labelData.filter(function(l) {
+  var lowUsage = labelData.filter(function(l)
+  {
     return l.threadCount > 0 && l.threadCount < 5;
   });
 
-  if (lowUsage.length > 0) {
+  if (lowUsage.length > 0)
+  {
     Logger.log('Labels with very few threads (1-4):');
-    for (var i = 0; i < Math.min(10, lowUsage.length); i++) {
+    for (var i = 0; i < Math.min(10, lowUsage.length); i++)
+    {
       Logger.log('  "' + lowUsage[i].name + '" (' + lowUsage[i].threadCount + ' threads)');
     }
-    if (lowUsage.length > 10) {
+    if (lowUsage.length > 10)
+    {
       Logger.log('  ... and ' + (lowUsage.length - 10) + ' more');
     }
     Logger.log('');
@@ -288,14 +374,21 @@ function suggestConsolidations(labelData) {
 }
 
 /**
- * Display category analysis based on pattern detection
+ * Display category analysis based on pattern detection.
+ * Shows how labels are distributed across detected categories.
+ *
+ * @param {Array} labelData - Label data array
  */
-function displayCategoryAnalysis(labelData) {
+function displayCategoryAnalysis(labelData)
+{
+  // Group labels by detected category
   var categories = {};
 
-  for (var i = 0; i < labelData.length; i++) {
+  for (var i = 0; i < labelData.length; i++)
+  {
     var cat = labelData[i].suggestedCategory || 'uncategorized';
-    if (!categories[cat]) {
+    if (!categories[cat])
+    {
       categories[cat] = {count: 0, threads: 0, labels: []};
     }
     categories[cat].count++;
@@ -304,32 +397,45 @@ function displayCategoryAnalysis(labelData) {
   }
 
   Logger.log('=== DETECTED CATEGORIES ===');
-  for (var cat in categories) {
-    if (cat !== 'uncategorized') {
+  for (var cat in categories)
+  {
+    if (cat !== 'uncategorized')
+    {
       Logger.log(cat.toUpperCase() + ': ' + categories[cat].count + ' labels, ' + categories[cat].threads + ' threads');
-      for (var i = 0; i < Math.min(5, categories[cat].labels.length); i++) {
+      for (var i = 0; i < Math.min(5, categories[cat].labels.length); i++)
+      {
         Logger.log('    - ' + categories[cat].labels[i]);
       }
-      if (categories[cat].labels.length > 5) {
+      if (categories[cat].labels.length > 5)
+      {
         Logger.log('    ... and ' + (categories[cat].labels.length - 5) + ' more');
       }
     }
   }
 
   Logger.log('');
-  if (categories.uncategorized && categories.uncategorized.count > 0) {
+
+  // Handle uncategorized labels
+  if (categories.uncategorized && categories.uncategorized.count > 0)
+  {
     Logger.log('UNCATEGORIZED: ' + categories.uncategorized.count + ' labels');
     Logger.log('(These will need manual review for your organization plan)');
-  } else {
+  }
+  else
+  {
     Logger.log('All labels have been categorized!');
   }
   Logger.log('');
 }
 
 /**
- * Propose a clean organization structure based on analysis
+ * Propose a clean organization structure based on analysis.
+ * Provides a recommended template for reorganization.
+ *
+ * @param {Array} labelData - Label data array
  */
-function proposeOrganization(labelData) {
+function proposeOrganization(labelData)
+{
   Logger.log('Based on your label analysis, here is a recommended structure:');
   Logger.log('');
   Logger.log('1. PERSONAL');
@@ -390,23 +496,33 @@ function proposeOrganization(labelData) {
 // ============================================================================
 
 /**
- * Create a visual tree of label hierarchy
+ * Create a visual tree of label hierarchy.
+ * Displays labels with indentation showing nesting.
  */
-function visualizeLabelHierarchy() {
+function visualizeLabelHierarchy()
+{
   var labels = GmailApp.getUserLabels();
-  var labelNames = labels.map(function(l) { return l.getName(); }).sort();
+  var labelNames = labels.map(function(l)
+  {
+    return l.getName();
+  }).sort();
 
   Logger.log('=== LABEL HIERARCHY TREE ===');
   Logger.log('');
 
-  for (var i = 0; i < labelNames.length; i++) {
+  for (var i = 0; i < labelNames.length; i++)
+  {
     var name = labelNames[i];
     var level = (name.match(/\//g) || []).length;
+
+    // Build indentation
     var indent = '';
-    for (var j = 0; j < level; j++) {
+    for (var j = 0; j < level; j++)
+    {
       indent += '    ';
     }
 
+    // Get just the label name (after last slash)
     var displayName = name.split('/').pop();
 
     // Add tree characters for visual hierarchy
@@ -416,10 +532,11 @@ function visualizeLabelHierarchy() {
 }
 
 /**
- * Generate a migration plan template based on current labels
- * This creates a starting point that users can customize
+ * Generate a migration plan template based on current labels.
+ * Creates a starting point that users can customize.
  */
-function generateMigrationTemplate() {
+function generateMigrationTemplate()
+{
   var labelData = collectLabelData(GmailApp.getUserLabels());
 
   Logger.log('=== MIGRATION PLAN TEMPLATE ===');
@@ -440,9 +557,11 @@ function generateMigrationTemplate() {
   Logger.log('  migrations: [');
 
   // Generate migration suggestions based on detected categories
-  for (var i = 0; i < labelData.length; i++) {
+  for (var i = 0; i < labelData.length; i++)
+  {
     var label = labelData[i];
-    if (label.suggestedCategory && label.threadCount > 0) {
+    if (label.suggestedCategory && label.threadCount > 0)
+    {
       var suggestedDest = label.suggestedCategory.charAt(0).toUpperCase() + label.suggestedCategory.slice(1);
       Logger.log('    // ' + label.threadCount + ' threads');
       Logger.log('    {from: "' + label.name + '", to: "' + suggestedDest + '"},');
@@ -460,10 +579,11 @@ function generateMigrationTemplate() {
 // ============================================================================
 
 /**
- * Quick overview of Gmail label stats
- * Faster than full analysis - good for checking progress
+ * Quick overview of Gmail label stats.
+ * Faster than full analysis - good for checking progress.
  */
-function quickStats() {
+function quickStats()
+{
   var labels = GmailApp.getUserLabels();
 
   var totalThreads = 0;
@@ -471,11 +591,18 @@ function quickStats() {
   var maxThreads = 0;
   var maxLabel = '';
 
-  for (var i = 0; i < labels.length; i++) {
+  for (var i = 0; i < labels.length; i++)
+  {
     var count = getThreadCountForLabel(labels[i]);
     totalThreads += count;
-    if (count === 0) emptyCount++;
-    if (count > maxThreads) {
+
+    if (count === 0)
+    {
+      emptyCount++;
+    }
+
+    if (count > maxThreads)
+    {
       maxThreads = count;
       maxLabel = labels[i].getName();
     }
@@ -489,7 +616,8 @@ function quickStats() {
 
   // Show completed migrations if any
   var completed = getCompletedMigrations();
-  if (completed.length > 0) {
+  if (completed.length > 0)
+  {
     Logger.log('');
     Logger.log('Completed migrations: ' + completed.length);
   }

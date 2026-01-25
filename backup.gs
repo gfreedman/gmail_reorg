@@ -13,7 +13,8 @@
  * Configuration for backup operations
  * Modify these values to customize backup behavior
  */
-var BACKUP_CONFIG = {
+var BACKUP_CONFIG =
+{
   // Maximum threads to process before flushing to prevent timeout
   FLUSH_INTERVAL: 100,
 
@@ -35,17 +36,18 @@ var BACKUP_CONFIG = {
 // ============================================================================
 
 /**
- * Main function to create a backup spreadsheet of all Gmail labels and threads
- * Creates a new spreadsheet in your Google Drive with complete email inventory
+ * Main function to create a backup spreadsheet of all Gmail labels and threads.
+ * Creates a new spreadsheet in your Google Drive with complete email inventory.
  *
  * @return {string} URL of the created spreadsheet
  */
-function createBackup() {
+function createBackup()
+{
   var startTime = new Date().getTime();
 
   log('Starting Gmail backup...');
 
-  // Create the spreadsheet
+  // Create the spreadsheet with today's date
   var dateStr = new Date().toISOString().split('T')[0];
   var ss = SpreadsheetApp.create(BACKUP_CONFIG.BACKUP_NAME_PREFIX + ' - ' + dateStr);
   var sheet = ss.getActiveSheet();
@@ -53,7 +55,8 @@ function createBackup() {
 
   // Set up headers
   var headers = ['Thread ID', 'Subject', 'From', 'Date', 'Labels', 'Message Count', 'Is Unread'];
-  if (BACKUP_CONFIG.INCLUDE_BODY_PREVIEW) {
+  if (BACKUP_CONFIG.INCLUDE_BODY_PREVIEW)
+  {
     headers.push('Body Preview');
   }
 
@@ -62,16 +65,18 @@ function createBackup() {
   sheet.setFrozenRows(1);
 
   var labels = GmailApp.getUserLabels();
-  var processedThreadIds = {};
+  var processedThreadIds = {};  // Track processed threads to avoid duplicates
   var row = 2;
   var skippedCount = 0;
 
   log('Found ' + labels.length + ' labels to process');
 
   // Process each label
-  for (var i = 0; i < labels.length; i++) {
-    // Check time remaining
-    if (!hasTimeRemaining(startTime, BACKUP_CONFIG.MAX_RUNTIME_MS)) {
+  for (var i = 0; i < labels.length; i++)
+  {
+    // Check time remaining before processing each label
+    if (!hasTimeRemaining(startTime, BACKUP_CONFIG.MAX_RUNTIME_MS))
+    {
       logWarning('Time limit approaching. Processed ' + (row - 2) + ' threads. Run again to continue.');
       break;
     }
@@ -82,42 +87,52 @@ function createBackup() {
     log('Processing label ' + (i + 1) + '/' + labels.length + ': ' + labelName);
 
     var threads;
-    try {
+    try
+    {
       threads = getAllThreadsFromLabel(label);
-    } catch (e) {
+    }
+    catch (e)
+    {
       logError('Error getting threads from "' + labelName + '": ' + e.message);
       continue;
     }
 
-    for (var j = 0; j < threads.length; j++) {
+    // Process each thread in this label
+    for (var j = 0; j < threads.length; j++)
+    {
       var thread = threads[j];
       var threadId = thread.getId();
 
-      // Skip if we've already processed this thread
-      if (processedThreadIds[threadId]) {
+      // Skip if we've already processed this thread (from another label)
+      if (processedThreadIds[threadId])
+      {
         skippedCount++;
         continue;
       }
 
       processedThreadIds[threadId] = true;
 
-      try {
+      try
+      {
         var rowData = extractThreadData(thread);
         sheet.getRange(row, 1, 1, rowData.length).setValues([rowData]);
         row++;
-      } catch (e) {
+      }
+      catch (e)
+      {
         logError('Error processing thread ' + threadId + ': ' + e.message);
       }
 
-      // Flush periodically to prevent timeout
-      if (row % BACKUP_CONFIG.FLUSH_INTERVAL === 0) {
+      // Flush periodically to prevent timeout and save progress
+      if (row % BACKUP_CONFIG.FLUSH_INTERVAL === 0)
+      {
         SpreadsheetApp.flush();
         log('Progress: ' + (row - 2) + ' threads backed up...');
       }
     }
   }
 
-  // Format the sheet
+  // Format the sheet for readability
   formatBackupSheet(sheet, headers.length);
 
   var totalThreads = row - 2;
@@ -130,21 +145,34 @@ function createBackup() {
 }
 
 /**
- * Extract data from a thread for backup
+ * Extract data from a thread for backup.
+ * Pulls subject, sender, date, labels, and optionally body preview.
+ *
  * @param {GmailThread} thread - The thread to extract data from
  * @return {Array} Row data array
  * @throws {Error} If thread has no messages
  */
-function extractThreadData(thread) {
+function extractThreadData(thread)
+{
   var messages = thread.getMessages();
-  if (!messages || messages.length === 0) {
+
+  // Safety check for empty threads
+  if (!messages || messages.length === 0)
+  {
     throw new Error('Thread has no messages');
   }
+
   var firstMessage = messages[0];
   var labels = thread.getLabels();
-  var allLabels = labels ? labels.map(function(l) { return l.getName(); }).join(', ') : '';
 
-  var rowData = [
+  // Join all label names with commas
+  var allLabels = labels ? labels.map(function(l)
+  {
+    return l.getName();
+  }).join(', ') : '';
+
+  var rowData =
+  [
     thread.getId(),
     thread.getFirstMessageSubject() || '(no subject)',
     firstMessage.getFrom(),
@@ -154,7 +182,9 @@ function extractThreadData(thread) {
     thread.isUnread()
   ];
 
-  if (BACKUP_CONFIG.INCLUDE_BODY_PREVIEW) {
+  // Optionally add body preview
+  if (BACKUP_CONFIG.INCLUDE_BODY_PREVIEW)
+  {
     var body = firstMessage.getPlainBody() || '';
     var preview = body.substring(0, BACKUP_CONFIG.BODY_PREVIEW_LENGTH).replace(/\n/g, ' ');
     rowData.push(preview);
@@ -164,19 +194,25 @@ function extractThreadData(thread) {
 }
 
 /**
- * Format the backup spreadsheet for readability
+ * Format the backup spreadsheet for readability.
+ * Auto-resizes columns and sets reasonable widths.
+ *
  * @param {Sheet} sheet - The sheet to format
  * @param {number} numColumns - Number of columns
  */
-function formatBackupSheet(sheet, numColumns) {
-  try {
+function formatBackupSheet(sheet, numColumns)
+{
+  try
+  {
     sheet.autoResizeColumns(1, numColumns);
 
     // Set column widths for better readability
-    sheet.setColumnWidth(2, 300); // Subject column
-    sheet.setColumnWidth(3, 200); // From column
-    sheet.setColumnWidth(5, 250); // Labels column
-  } catch (e) {
+    sheet.setColumnWidth(2, 300);  // Subject column
+    sheet.setColumnWidth(3, 200);  // From column
+    sheet.setColumnWidth(5, 250);  // Labels column
+  }
+  catch (e)
+  {
     logWarning('Could not auto-format sheet: ' + e.message);
   }
 }
@@ -186,12 +222,13 @@ function formatBackupSheet(sheet, numColumns) {
 // ============================================================================
 
 /**
- * Create a summary report of label usage
- * More efficient than full backup - just shows label statistics
+ * Create a summary report of label usage.
+ * More efficient than full backup - just shows label statistics.
  *
  * @return {string} URL of the created spreadsheet
  */
-function createLabelSummary() {
+function createLabelSummary()
+{
   log('Creating label summary...');
 
   var dateStr = new Date().toISOString().split('T')[0];
@@ -199,6 +236,7 @@ function createLabelSummary() {
   var sheet = ss.getActiveSheet();
   sheet.setName('Label Summary');
 
+  // Set up headers
   var headers = ['Label Name', 'Thread Count', 'Nesting Level', 'Parent Label'];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
@@ -208,11 +246,17 @@ function createLabelSummary() {
   var row = 2;
   var totalThreads = 0;
 
-  for (var i = 0; i < labels.length; i++) {
+  // Process each label
+  for (var i = 0; i < labels.length; i++)
+  {
     var label = labels[i];
     var name = label.getName();
     var threadCount = getThreadCountForLabel(label);
+
+    // Calculate nesting level (count slashes)
     var level = (name.match(/\//g) || []).length;
+
+    // Extract parent label name
     var parent = name.indexOf('/') > -1 ? name.substring(0, name.lastIndexOf('/')) : '';
 
     totalThreads += threadCount;
@@ -222,7 +266,7 @@ function createLabelSummary() {
     row++;
   }
 
-  // Add summary row
+  // Add summary row at the bottom
   row++;
   sheet.getRange(row, 1, 1, 2).setValues([['TOTAL', totalThreads]]);
   sheet.getRange(row, 1, 1, 2).setFontWeight('bold');
@@ -241,12 +285,13 @@ function createLabelSummary() {
 // ============================================================================
 
 /**
- * Create a backup of only unread emails
- * Useful for quick backups of new mail
+ * Create a backup of only unread emails.
+ * Useful for quick backups of new mail.
  *
  * @return {string} URL of the created spreadsheet
  */
-function backupUnreadEmails() {
+function backupUnreadEmails()
+{
   log('Backing up unread emails...');
 
   var dateStr = new Date().toISOString().split('T')[0];
@@ -254,22 +299,30 @@ function backupUnreadEmails() {
   var sheet = ss.getActiveSheet();
   sheet.setName('Unread Emails');
 
+  // Set up headers
   var headers = ['Thread ID', 'Subject', 'From', 'Date', 'Labels'];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
   sheet.setFrozenRows(1);
 
+  // Search for unread threads
   var threads = GmailApp.search('is:unread');
   var row = 2;
 
   log('Found ' + threads.length + ' unread threads');
 
-  for (var i = 0; i < threads.length; i++) {
+  // Process each unread thread
+  for (var i = 0; i < threads.length; i++)
+  {
     var thread = threads[i];
     var firstMessage = thread.getMessages()[0];
-    var allLabels = thread.getLabels().map(function(l) { return l.getName(); }).join(', ');
+    var allLabels = thread.getLabels().map(function(l)
+    {
+      return l.getName();
+    }).join(', ');
 
-    var rowData = [
+    var rowData =
+    [
       thread.getId(),
       thread.getFirstMessageSubject() || '(no subject)',
       firstMessage.getFrom(),
@@ -288,31 +341,39 @@ function backupUnreadEmails() {
 }
 
 /**
- * Backup emails from a specific date range
+ * Backup emails from a specific date range.
+ * Useful for archiving specific time periods.
  *
  * @param {Date} startDate - Start of date range
  * @param {Date} endDate - End of date range
  * @return {string} URL of the created spreadsheet
  */
-function backupDateRange(startDate, endDate) {
-  if (!startDate || !endDate) {
+function backupDateRange(startDate, endDate)
+{
+  // Validate required parameters
+  if (!startDate || !endDate)
+  {
     logError('Both startDate and endDate are required');
     return null;
   }
 
+  // Format dates for Gmail search query
   var startStr = Utilities.formatDate(startDate, Session.getScriptTimeZone(), 'yyyy/MM/dd');
   var endStr = Utilities.formatDate(endDate, Session.getScriptTimeZone(), 'yyyy/MM/dd');
 
   log('Backing up emails from ' + startStr + ' to ' + endStr);
 
+  // Build Gmail search query
   var query = 'after:' + startStr + ' before:' + endStr;
   var threads = GmailApp.search(query);
 
+  // Create the spreadsheet
   var dateStr = new Date().toISOString().split('T')[0];
   var ss = SpreadsheetApp.create('Gmail Backup (' + startStr + ' to ' + endStr + ') - ' + dateStr);
   var sheet = ss.getActiveSheet();
   sheet.setName('Email Backup');
 
+  // Set up headers
   var headers = ['Thread ID', 'Subject', 'From', 'Date', 'Labels', 'Message Count'];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
@@ -321,12 +382,18 @@ function backupDateRange(startDate, endDate) {
   var row = 2;
   log('Found ' + threads.length + ' threads in date range');
 
-  for (var i = 0; i < threads.length; i++) {
+  // Process each thread
+  for (var i = 0; i < threads.length; i++)
+  {
     var thread = threads[i];
     var firstMessage = thread.getMessages()[0];
-    var allLabels = thread.getLabels().map(function(l) { return l.getName(); }).join(', ');
+    var allLabels = thread.getLabels().map(function(l)
+    {
+      return l.getName();
+    }).join(', ');
 
-    var rowData = [
+    var rowData =
+    [
       thread.getId(),
       thread.getFirstMessageSubject() || '(no subject)',
       firstMessage.getFrom(),
@@ -338,7 +405,9 @@ function backupDateRange(startDate, endDate) {
     sheet.getRange(row, 1, 1, rowData.length).setValues([rowData]);
     row++;
 
-    if (row % BACKUP_CONFIG.FLUSH_INTERVAL === 0) {
+    // Flush periodically for long backups
+    if (row % BACKUP_CONFIG.FLUSH_INTERVAL === 0)
+    {
       SpreadsheetApp.flush();
       log('Progress: ' + (row - 2) + ' threads...');
     }

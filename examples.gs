@@ -13,9 +13,11 @@
 
 /**
  * EXAMPLE 1: Quick Health Check
- * Run this first to understand your Gmail's current state
+ * Run this first to understand your Gmail's current state.
+ * Provides recommendations based on your label count and structure.
  */
-function example_healthCheck() {
+function example_healthCheck()
+{
   Logger.log('=== GMAIL HEALTH CHECK ===');
   Logger.log('');
 
@@ -28,11 +30,19 @@ function example_healthCheck() {
   var largestLabel = '';
   var largestCount = 0;
 
-  for (var i = 0; i < labels.length; i++) {
+  // Scan all labels
+  for (var i = 0; i < labels.length; i++)
+  {
     var count = getThreadCountForLabel(labels[i]);
     totalThreads += count;
-    if (count === 0) emptyCount++;
-    if (count > largestCount) {
+
+    if (count === 0)
+    {
+      emptyCount++;
+    }
+
+    if (count > largestCount)
+    {
       largestCount = count;
       largestLabel = labels[i].getName();
     }
@@ -44,18 +54,21 @@ function example_healthCheck() {
   Logger.log('Largest label: "' + largestLabel + '" (' + largestCount + ' threads)');
   Logger.log('');
 
-  // Recommendations
+  // Provide recommendations
   Logger.log('=== RECOMMENDATIONS ===');
 
-  if (totalLabels > 50) {
+  if (totalLabels > 50)
+  {
     Logger.log('- You have many labels. Consider consolidating into 5-10 categories.');
   }
 
-  if (emptyCount > 10) {
+  if (emptyCount > 10)
+  {
     Logger.log('- You have ' + emptyCount + ' empty labels. Run deleteEmptyLabels(true) to review.');
   }
 
-  if (totalLabels <= 20) {
+  if (totalLabels <= 20)
+  {
     Logger.log('- Your label count is manageable. Minor reorganization may suffice.');
   }
 
@@ -67,10 +80,12 @@ function example_healthCheck() {
 
 /**
  * EXAMPLE 2: Find Large Labels
- * Identify labels that might need to be split up
+ * Identify labels that might need to be split up.
+ * Large labels often benefit from subcategories.
  */
-function example_findLargeLabels() {
-  var THRESHOLD = 100; // Labels with more than this many threads
+function example_findLargeLabels()
+{
+  var THRESHOLD = 100;  // Labels with more than this many threads
 
   Logger.log('=== LARGE LABELS (>' + THRESHOLD + ' threads) ===');
   Logger.log('');
@@ -78,9 +93,12 @@ function example_findLargeLabels() {
   var labels = GmailApp.getUserLabels();
   var largeLabels = [];
 
-  for (var i = 0; i < labels.length; i++) {
+  // Find labels exceeding threshold
+  for (var i = 0; i < labels.length; i++)
+  {
     var count = getThreadCountForLabel(labels[i]);
-    if (count > THRESHOLD) {
+    if (count > THRESHOLD)
+    {
       largeLabels.push({
         name: labels[i].getName(),
         count: count
@@ -89,12 +107,19 @@ function example_findLargeLabels() {
   }
 
   // Sort by count descending
-  largeLabels.sort(function(a, b) { return b.count - a.count; });
+  largeLabels.sort(function(a, b)
+  {
+    return b.count - a.count;
+  });
 
-  if (largeLabels.length === 0) {
+  if (largeLabels.length === 0)
+  {
     Logger.log('No labels exceed ' + THRESHOLD + ' threads.');
-  } else {
-    for (var i = 0; i < largeLabels.length; i++) {
+  }
+  else
+  {
+    for (var i = 0; i < largeLabels.length; i++)
+    {
       Logger.log(largeLabels[i].count + ' threads: ' + largeLabels[i].name);
     }
   }
@@ -102,18 +127,23 @@ function example_findLargeLabels() {
 
 /**
  * EXAMPLE 3: List Root Labels Only
- * See just your top-level organization
+ * See just your top-level organization.
+ * Helps understand your current category structure.
  */
-function example_listRootLabels() {
+function example_listRootLabels()
+{
   Logger.log('=== ROOT-LEVEL LABELS ===');
   Logger.log('');
 
   var labels = GmailApp.getUserLabels();
   var rootLabels = [];
 
-  for (var i = 0; i < labels.length; i++) {
+  // Find labels without slashes (root level)
+  for (var i = 0; i < labels.length; i++)
+  {
     var name = labels[i].getName();
-    if (name.indexOf('/') === -1) {
+    if (name.indexOf('/') === -1)
+    {
       var count = getThreadCountForLabel(labels[i]);
       rootLabels.push({
         name: name,
@@ -122,9 +152,14 @@ function example_listRootLabels() {
     }
   }
 
-  rootLabels.sort(function(a, b) { return a.name.localeCompare(b.name); });
+  // Sort alphabetically
+  rootLabels.sort(function(a, b)
+  {
+    return a.name.localeCompare(b.name);
+  });
 
-  for (var i = 0; i < rootLabels.length; i++) {
+  for (var i = 0; i < rootLabels.length; i++)
+  {
     Logger.log(rootLabels[i].name + ' (' + rootLabels[i].count + ' threads)');
   }
 
@@ -139,29 +174,36 @@ function example_listRootLabels() {
 
 /**
  * EXAMPLE 4: Apply Minimal Organization
- * Creates just 5 top-level categories
+ * Creates just 5 top-level categories.
+ * Good starting point for simple organization.
  */
-function example_minimalPlan() {
-  // Override the organization plan temporarily
-  var minimalPlan = {
-    newLabels: [
+function example_minimalPlan()
+{
+  // Define a minimal organization plan
+  var minimalPlan =
+  {
+    newLabels:
+    [
       'Personal',
       'Work',
       'Finance',
       'Shopping',
       'Archive'
     ],
-    migrations: [
+    migrations:
+    [
       // Add your specific migrations here
       // {from: 'YourOldLabel', to: 'Personal'},
     ]
   };
 
-  // Validate and preview
+  // Preview the plan
   Logger.log('=== MINIMAL ORGANIZATION PLAN ===');
   Logger.log('');
   Logger.log('This plan creates 5 simple categories:');
-  for (var i = 0; i < minimalPlan.newLabels.length; i++) {
+
+  for (var i = 0; i < minimalPlan.newLabels.length; i++)
+  {
     Logger.log('  - ' + minimalPlan.newLabels[i]);
   }
 
@@ -174,14 +216,17 @@ function example_minimalPlan() {
 
 /**
  * EXAMPLE 5: Year-Based Archive Structure
- * For organizing historical emails by year
+ * For organizing historical emails by year.
+ * Useful for long-term email archival.
  */
-function example_yearBasedArchive() {
+function example_yearBasedArchive()
+{
   var currentYear = new Date().getFullYear();
   var years = [];
 
   // Generate labels for last 5 years
-  for (var i = 0; i < 5; i++) {
+  for (var i = 0; i < 5; i++)
+  {
     years.push('Archive/' + (currentYear - i));
   }
   years.push('Archive/Older');
@@ -189,7 +234,9 @@ function example_yearBasedArchive() {
   Logger.log('=== YEAR-BASED ARCHIVE STRUCTURE ===');
   Logger.log('');
   Logger.log('Suggested archive labels:');
-  for (var i = 0; i < years.length; i++) {
+
+  for (var i = 0; i < years.length; i++)
+  {
     Logger.log('  - ' + years[i]);
   }
 
@@ -203,17 +250,21 @@ function example_yearBasedArchive() {
 
 /**
  * EXAMPLE 6: Preview Empty Label Cleanup
- * Shows what deleteEmptyLabels would remove
+ * Shows what deleteEmptyLabels would remove.
+ * Safe preview mode - no changes made.
  */
-function example_previewEmptyCleanup() {
-  deleteEmptyLabels(true); // true = dry run
+function example_previewEmptyCleanup()
+{
+  deleteEmptyLabels(true);  // true = dry run
 }
 
 /**
  * EXAMPLE 7: Find Orphaned Nested Labels
- * Labels whose parents don't exist
+ * Labels whose parents don't exist.
+ * These can cause confusion in the Gmail interface.
  */
-function example_findOrphanedLabels() {
+function example_findOrphanedLabels()
+{
   Logger.log('=== ORPHANED LABELS CHECK ===');
   Logger.log('');
 
@@ -221,19 +272,23 @@ function example_findOrphanedLabels() {
   var labelNames = {};
 
   // Build set of all label names
-  for (var i = 0; i < labels.length; i++) {
+  for (var i = 0; i < labels.length; i++)
+  {
     labelNames[labels[i].getName()] = true;
   }
 
-  // Find orphans
+  // Find orphans (nested labels with missing parents)
   var orphans = [];
-  for (var i = 0; i < labels.length; i++) {
+  for (var i = 0; i < labels.length; i++)
+  {
     var name = labels[i].getName();
     var lastSlash = name.lastIndexOf('/');
 
-    if (lastSlash > 0) {
+    if (lastSlash > 0)
+    {
       var parent = name.substring(0, lastSlash);
-      if (!labelNames[parent]) {
+      if (!labelNames[parent])
+      {
         orphans.push({
           label: name,
           missingParent: parent
@@ -242,11 +297,15 @@ function example_findOrphanedLabels() {
     }
   }
 
-  if (orphans.length === 0) {
+  if (orphans.length === 0)
+  {
     Logger.log('No orphaned labels found.');
-  } else {
+  }
+  else
+  {
     Logger.log('Found ' + orphans.length + ' orphaned labels:');
-    for (var i = 0; i < orphans.length; i++) {
+    for (var i = 0; i < orphans.length; i++)
+    {
       Logger.log('  "' + orphans[i].label + '" (parent "' + orphans[i].missingParent + '" missing)');
     }
   }
@@ -258,11 +317,13 @@ function example_findOrphanedLabels() {
 
 /**
  * EXAMPLE 8: Generate Migration Rules from Pattern
- * Migrate all labels matching a pattern to a destination
+ * Migrate all labels matching a pattern to a destination.
+ * Useful for bulk reorganization.
  */
-function example_generatePatternMigrations() {
-  var PATTERN = 'Old'; // Labels containing this string
-  var DESTINATION = 'Archive'; // Where to migrate them
+function example_generatePatternMigrations()
+{
+  var PATTERN = 'Old';       // Labels containing this string
+  var DESTINATION = 'Archive';  // Where to migrate them
 
   Logger.log('=== PATTERN-BASED MIGRATION GENERATOR ===');
   Logger.log('');
@@ -272,9 +333,12 @@ function example_generatePatternMigrations() {
   var labels = GmailApp.getUserLabels();
   var matches = [];
 
-  for (var i = 0; i < labels.length; i++) {
+  // Find matching labels
+  for (var i = 0; i < labels.length; i++)
+  {
     var name = labels[i].getName();
-    if (name.toLowerCase().indexOf(PATTERN.toLowerCase()) > -1) {
+    if (name.toLowerCase().indexOf(PATTERN.toLowerCase()) > -1)
+    {
       var count = getThreadCountForLabel(labels[i]);
       matches.push({
         name: name,
@@ -283,12 +347,16 @@ function example_generatePatternMigrations() {
     }
   }
 
-  if (matches.length === 0) {
+  if (matches.length === 0)
+  {
     Logger.log('No labels match the pattern.');
-  } else {
+  }
+  else
+  {
     Logger.log('Add these to your migrations array:');
     Logger.log('');
-    for (var i = 0; i < matches.length; i++) {
+    for (var i = 0; i < matches.length; i++)
+    {
       Logger.log("  {from: '" + matches[i].name + "', to: '" + DESTINATION + "'}, // " + matches[i].count + ' threads');
     }
   }
@@ -296,10 +364,13 @@ function example_generatePatternMigrations() {
 
 /**
  * EXAMPLE 9: Count Threads by Category Pattern
- * See how many threads would go to each category
+ * See how many threads would go to each category.
+ * Helps plan your reorganization structure.
  */
-function example_categoryDistribution() {
-  var categories = {
+function example_categoryDistribution()
+{
+  var categories =
+  {
     'personal': ['family', 'friend', 'personal', 'home'],
     'work': ['work', 'job', 'office', 'client', 'project'],
     'finance': ['bank', 'payment', 'receipt', 'tax', 'invoice'],
@@ -312,47 +383,62 @@ function example_categoryDistribution() {
   var labels = GmailApp.getUserLabels();
   var results = {};
 
-  for (var cat in categories) {
+  // Initialize results
+  for (var cat in categories)
+  {
     results[cat] = {labels: 0, threads: 0};
   }
   results['other'] = {labels: 0, threads: 0};
 
-  for (var i = 0; i < labels.length; i++) {
+  // Categorize each label
+  for (var i = 0; i < labels.length; i++)
+  {
     var name = labels[i].getName().toLowerCase();
     var count = getThreadCountForLabel(labels[i]);
     var matched = false;
 
-    for (var cat in categories) {
+    for (var cat in categories)
+    {
       var keywords = categories[cat];
-      for (var j = 0; j < keywords.length; j++) {
-        if (name.indexOf(keywords[j]) > -1) {
+      for (var j = 0; j < keywords.length; j++)
+      {
+        if (name.indexOf(keywords[j]) > -1)
+        {
           results[cat].labels++;
           results[cat].threads += count;
           matched = true;
           break;
         }
       }
-      if (matched) break;
+      if (matched)
+      {
+        break;
+      }
     }
 
-    if (!matched) {
+    if (!matched)
+    {
       results['other'].labels++;
       results['other'].threads += count;
     }
   }
 
-  for (var cat in results) {
+  // Display results
+  for (var cat in results)
+  {
     Logger.log(cat.toUpperCase() + ': ' + results[cat].labels + ' labels, ~' + results[cat].threads + ' threads');
   }
 }
 
 /**
  * EXAMPLE 10: Test Single Migration
- * Dry-run test of moving one label
+ * Dry-run test of moving one label.
+ * Use this to verify a migration before adding to your plan.
  */
-function example_testSingleMigration() {
-  var FROM_LABEL = 'TestLabel'; // Change this
-  var TO_LABEL = 'Archive/Test'; // Change this
+function example_testSingleMigration()
+{
+  var FROM_LABEL = 'TestLabel';    // Change this
+  var TO_LABEL = 'Archive/Test';   // Change this
 
   Logger.log('=== SINGLE MIGRATION TEST ===');
   Logger.log('');
@@ -362,7 +448,8 @@ function example_testSingleMigration() {
 
   var fromLabel = GmailApp.getUserLabelByName(FROM_LABEL);
 
-  if (!fromLabel) {
+  if (!fromLabel)
+  {
     Logger.log('ERROR: Source label "' + FROM_LABEL + '" not found.');
     Logger.log('Run listAllLabelsDetailed() to see your labels.');
     return;
@@ -371,10 +458,12 @@ function example_testSingleMigration() {
   var threads = getAllThreadsFromLabel(fromLabel);
   Logger.log('Threads to migrate: ' + threads.length);
 
-  if (threads.length > 0) {
+  if (threads.length > 0)
+  {
     Logger.log('');
     Logger.log('Sample threads:');
-    for (var i = 0; i < Math.min(5, threads.length); i++) {
+    for (var i = 0; i < Math.min(5, threads.length); i++)
+    {
       Logger.log('  - ' + threads[i].getFirstMessageSubject());
     }
   }

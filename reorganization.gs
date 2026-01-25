@@ -12,7 +12,8 @@
 /**
  * Main configuration - modify these for your needs
  */
-var CONFIG = {
+var CONFIG =
+{
   // SAFETY: Set to false only when ready to execute live migration
   DRY_RUN: true,
 
@@ -34,15 +35,17 @@ var CONFIG = {
 // ============================================================================
 
 /**
- * Define your organization plan here
- * This is a TEMPLATE - customize it to match YOUR Gmail labels
+ * Define your organization plan here.
+ * This is a TEMPLATE - customize it to match YOUR Gmail labels.
  *
- * EXAMPLE PLANS are provided in comments below for reference
+ * EXAMPLE PLANS are provided in comments below for reference.
  */
-var ORGANIZATION_PLAN = {
+var ORGANIZATION_PLAN =
+{
   // New label structure to create
   // These will be created before any migrations run
-  newLabels: [
+  newLabels:
+  [
     // === EXAMPLE: Personal Life ===
     'Personal',
     'Personal/Family',
@@ -102,7 +105,8 @@ var ORGANIZATION_PLAN = {
   // - The 'from' label must exist in your Gmail
   // - The 'to' label will be created if it doesn't exist
   //
-  migrations: [
+  migrations:
+  [
     // === EXAMPLE MIGRATIONS (customize these!) ===
     //
     // Personal examples:
@@ -137,8 +141,10 @@ var ORGANIZATION_PLAN = {
  * EXAMPLE PLAN 1: Minimal Structure (5 categories)
  * Good for users who want simplicity
  */
-var EXAMPLE_PLAN_MINIMAL = {
-  newLabels: [
+var EXAMPLE_PLAN_MINIMAL =
+{
+  newLabels:
+  [
     'Personal',
     'Work',
     'Finance',
@@ -152,8 +158,10 @@ var EXAMPLE_PLAN_MINIMAL = {
  * EXAMPLE PLAN 2: Business/Freelancer Structure
  * Good for consultants and freelancers
  */
-var EXAMPLE_PLAN_BUSINESS = {
-  newLabels: [
+var EXAMPLE_PLAN_BUSINESS =
+{
+  newLabels:
+  [
     'Clients',
     'Clients/Active',
     'Clients/Past',
@@ -174,8 +182,10 @@ var EXAMPLE_PLAN_BUSINESS = {
  * EXAMPLE PLAN 3: GTD (Getting Things Done) Style
  * Good for productivity enthusiasts
  */
-var EXAMPLE_PLAN_GTD = {
-  newLabels: [
+var EXAMPLE_PLAN_GTD =
+{
+  newLabels:
+  [
     'Action',
     'Action/Today',
     'Action/This Week',
@@ -195,10 +205,13 @@ var EXAMPLE_PLAN_GTD = {
 // ============================================================================
 
 /**
- * Create a fresh batch stats object to avoid global state pollution
+ * Create a fresh batch stats object to avoid global state pollution.
+ * Called at the start of each main() run.
+ *
  * @return {Object} New batch stats object
  */
-function createBatchStats() {
+function createBatchStats()
+{
   return {
     labelsCreated: 0,
     threadsMigrated: 0,
@@ -212,10 +225,11 @@ function createBatchStats() {
 var _batchStats = null;
 
 /**
- * Main entry point for reorganization
- * Run this function to start or resume the migration
+ * Main entry point for reorganization.
+ * Run this function to start or resume the migration.
  */
-function main() {
+function main()
+{
   // Initialize fresh state for this run
   _batchStats = createBatchStats();
 
@@ -227,23 +241,30 @@ function main() {
   log('');
 
   // Step 1: Validate the plan
-  if (!runValidation()) {
+  if (!runValidation())
+  {
     logError('Validation failed. Please fix errors before proceeding.');
     return;
   }
 
   // Step 2: Create new label structure
-  if (hasTimeRemaining(_batchStats.startTime, CONFIG.MAX_RUNTIME_MS)) {
+  if (hasTimeRemaining(_batchStats.startTime, CONFIG.MAX_RUNTIME_MS))
+  {
     createNewLabelStructure();
-  } else {
+  }
+  else
+  {
     logWarning('Time limit reached after validation. Run again to continue.');
     return;
   }
 
   // Step 3: Execute migrations
-  if (hasTimeRemaining(_batchStats.startTime, CONFIG.MAX_RUNTIME_MS)) {
+  if (hasTimeRemaining(_batchStats.startTime, CONFIG.MAX_RUNTIME_MS))
+  {
     migrateLabels();
-  } else {
+  }
+  else
+  {
     logWarning('Time limit reached after creating labels. Run again to continue.');
   }
 
@@ -251,35 +272,42 @@ function main() {
   showBatchSummary();
 
   // Update statistics
-  updateStatistics(__batchStats.threadsMigrated, __batchStats.labelsCreated);
+  updateStatistics(_batchStats.threadsMigrated, _batchStats.labelsCreated);
 }
 
 /**
- * Validate the organization plan before execution
+ * Validate the organization plan before execution.
+ *
  * @return {boolean} True if plan is valid
  */
-function runValidation() {
+function runValidation()
+{
   log('Step 1: Validating organization plan...');
 
   var result = validateOrganizationPlan(ORGANIZATION_PLAN);
 
-  if (result.errors.length > 0) {
+  if (result.errors.length > 0)
+  {
     Logger.log('');
     Logger.log('ERRORS (must fix):');
-    for (var i = 0; i < result.errors.length; i++) {
+    for (var i = 0; i < result.errors.length; i++)
+    {
       Logger.log('  - ' + result.errors[i]);
     }
   }
 
-  if (result.warnings.length > 0) {
+  if (result.warnings.length > 0)
+  {
     Logger.log('');
     Logger.log('WARNINGS (review):');
-    for (var i = 0; i < result.warnings.length; i++) {
+    for (var i = 0; i < result.warnings.length; i++)
+    {
       Logger.log('  - ' + result.warnings[i]);
     }
   }
 
-  if (result.valid) {
+  if (result.valid)
+  {
     log('Validation passed!');
   }
 
@@ -288,43 +316,55 @@ function runValidation() {
 }
 
 /**
- * Create the new label structure
+ * Create the new label structure defined in the plan.
  */
-function createNewLabelStructure() {
+function createNewLabelStructure()
+{
   log('Step 2: Creating new label structure...');
 
   var created = 0;
   var skipped = 0;
 
-  for (var i = 0; i < ORGANIZATION_PLAN.newLabels.length; i++) {
-    if (!hasTimeRemaining(_batchStats.startTime, CONFIG.MAX_RUNTIME_MS)) {
+  for (var i = 0; i < ORGANIZATION_PLAN.newLabels.length; i++)
+  {
+    // Check time remaining
+    if (!hasTimeRemaining(_batchStats.startTime, CONFIG.MAX_RUNTIME_MS))
+    {
       logWarning('Time limit reached during label creation');
       break;
     }
 
     var labelName = ORGANIZATION_PLAN.newLabels[i];
 
-    try {
+    try
+    {
       var existing = GmailApp.getUserLabelByName(labelName);
 
-      if (existing) {
-        if (CONFIG.VERBOSE) {
+      if (existing)
+      {
+        if (CONFIG.VERBOSE)
+        {
           log('  Already exists: ' + labelName);
         }
         skipped++;
         continue;
       }
 
-      if (!CONFIG.DRY_RUN) {
+      if (!CONFIG.DRY_RUN)
+      {
         GmailApp.createLabel(labelName);
         log('  Created: ' + labelName);
         created++;
         _batchStats.labelsCreated++;
-      } else {
+      }
+      else
+      {
         log('  [DRY RUN] Would create: ' + labelName);
         created++;
       }
-    } catch (e) {
+    }
+    catch (e)
+    {
       logError('Failed to create "' + labelName + '": ' + e.message);
       _batchStats.errors.push('Label creation: ' + labelName + ' - ' + e.message);
     }
@@ -335,14 +375,16 @@ function createNewLabelStructure() {
 }
 
 /**
- * Execute label migrations according to the plan
+ * Execute label migrations according to the plan.
  */
-function migrateLabels() {
+function migrateLabels()
+{
   log('Step 3: Migrating labels...');
 
   var migrations = ORGANIZATION_PLAN.migrations;
 
-  if (migrations.length === 0) {
+  if (migrations.length === 0)
+  {
     log('No migrations defined. Add migrations to ORGANIZATION_PLAN.migrations');
     return;
   }
@@ -351,9 +393,11 @@ function migrateLabels() {
   var completed = 0;
   var skipped = 0;
 
-  for (var i = 0; i < migrations.length; i++) {
+  for (var i = 0; i < migrations.length; i++)
+  {
     // Check time remaining
-    if (!hasTimeRemaining(_batchStats.startTime, CONFIG.MAX_RUNTIME_MS)) {
+    if (!hasTimeRemaining(_batchStats.startTime, CONFIG.MAX_RUNTIME_MS))
+    {
       log('Time limit reached at migration ' + (i + 1) + '/' + totalMigrations);
       saveMigrationState({
         lastMigrationIndex: i,
@@ -366,8 +410,10 @@ function migrateLabels() {
     var migration = migrations[i];
 
     // Skip if already completed
-    if (CONFIG.SKIP_COMPLETED && isMigrationCompleted(migration.from)) {
-      if (CONFIG.VERBOSE) {
+    if (CONFIG.SKIP_COMPLETED && isMigrationCompleted(migration.from))
+    {
+      if (CONFIG.VERBOSE)
+      {
         log('  Skipping (already completed): ' + migration.from);
       }
       skipped++;
@@ -377,13 +423,15 @@ function migrateLabels() {
     // Execute migration
     var result = migrateSingleLabel(migration.from, migration.to);
 
-    if (result.success) {
+    if (result.success)
+    {
       completed++;
       _batchStats.migrationsCompleted++;
       _batchStats.threadsMigrated += result.threadCount;
 
       // Mark as completed for resume capability
-      if (!CONFIG.DRY_RUN) {
+      if (!CONFIG.DRY_RUN)
+      {
         markMigrationCompleted(migration.from, migration.to, result.threadCount);
       }
     }
@@ -393,28 +441,35 @@ function migrateLabels() {
 }
 
 /**
- * Migrate a single label from old to new
+ * Migrate a single label from old to new.
+ * Applies new label to all threads, then removes old label.
+ *
  * @param {string} fromLabelName - Source label name
  * @param {string} toLabelName - Destination label name
  * @return {Object} {success: boolean, threadCount: number, error: string}
  */
-function migrateSingleLabel(fromLabelName, toLabelName) {
+function migrateSingleLabel(fromLabelName, toLabelName)
+{
   var result = {success: false, threadCount: 0, error: null};
 
   // Get source label
   var fromLabel = GmailApp.getUserLabelByName(fromLabelName);
-  if (!fromLabel) {
-    if (CONFIG.VERBOSE) {
+  if (!fromLabel)
+  {
+    if (CONFIG.VERBOSE)
+    {
       logWarning('Source label not found: ' + fromLabelName);
     }
     return result;
   }
 
-  // Get threads
+  // Get threads from source label
   var threads = getAllThreadsFromLabel(fromLabel);
 
-  if (threads.length === 0) {
-    if (CONFIG.VERBOSE) {
+  if (threads.length === 0)
+  {
+    if (CONFIG.VERBOSE)
+    {
       log('  No threads in: ' + fromLabelName);
     }
     result.success = true;
@@ -423,11 +478,14 @@ function migrateSingleLabel(fromLabelName, toLabelName) {
 
   log('  Migrating ' + threads.length + ' threads: "' + fromLabelName + '" -> "' + toLabelName + '"');
 
-  if (!CONFIG.DRY_RUN) {
-    try {
+  if (!CONFIG.DRY_RUN)
+  {
+    try
+    {
       // Get or create destination label
       var toLabel = GmailApp.getUserLabelByName(toLabelName);
-      if (!toLabel) {
+      if (!toLabel)
+      {
         toLabel = GmailApp.createLabel(toLabelName);
         log('    Created destination label: ' + toLabelName);
         _batchStats.labelsCreated++;
@@ -443,12 +501,16 @@ function migrateSingleLabel(fromLabelName, toLabelName) {
       result.threadCount = threads.length;
 
       log('    Completed: ' + threads.length + ' threads migrated');
-    } catch (e) {
+    }
+    catch (e)
+    {
       logError('Migration failed for "' + fromLabelName + '": ' + e.message);
       result.error = e.message;
       _batchStats.errors.push('Migration: ' + fromLabelName + ' - ' + e.message);
     }
-  } else {
+  }
+  else
+  {
     log('    [DRY RUN] Would migrate ' + threads.length + ' threads');
     result.success = true;
     result.threadCount = threads.length;
@@ -458,37 +520,46 @@ function migrateSingleLabel(fromLabelName, toLabelName) {
 }
 
 /**
- * Apply a label to threads in batches
+ * Apply a label to threads in batches.
+ * Batching prevents API quota exhaustion.
+ *
  * @param {GmailThread[]} threads - Threads to label
  * @param {GmailLabel} label - Label to apply
  */
-function applyLabelToThreads(threads, label) {
-  for (var i = 0; i < threads.length; i += CONFIG.BATCH_SIZE) {
+function applyLabelToThreads(threads, label)
+{
+  for (var i = 0; i < threads.length; i += CONFIG.BATCH_SIZE)
+  {
     var batch = threads.slice(i, Math.min(i + CONFIG.BATCH_SIZE, threads.length));
     label.addToThreads(batch);
 
-    if (CONFIG.VERBOSE && threads.length > CONFIG.BATCH_SIZE) {
+    if (CONFIG.VERBOSE && threads.length > CONFIG.BATCH_SIZE)
+    {
       log('    Applied label to ' + Math.min(i + CONFIG.BATCH_SIZE, threads.length) + '/' + threads.length + ' threads');
     }
   }
 }
 
 /**
- * Remove a label from threads in batches
+ * Remove a label from threads in batches.
+ *
  * @param {GmailThread[]} threads - Threads to unlabel
  * @param {GmailLabel} label - Label to remove
  */
-function removeOldLabel(threads, label) {
-  for (var i = 0; i < threads.length; i += CONFIG.BATCH_SIZE) {
+function removeOldLabel(threads, label)
+{
+  for (var i = 0; i < threads.length; i += CONFIG.BATCH_SIZE)
+  {
     var batch = threads.slice(i, Math.min(i + CONFIG.BATCH_SIZE, threads.length));
     label.removeFromThreads(batch);
   }
 }
 
 /**
- * Show summary of this batch run
+ * Show summary of this batch run.
  */
-function showBatchSummary() {
+function showBatchSummary()
+{
   var elapsed = Math.round((new Date().getTime() - _batchStats.startTime) / 1000);
 
   Logger.log('');
@@ -500,10 +571,12 @@ function showBatchSummary() {
   Logger.log('Migrations completed: ' + _batchStats.migrationsCompleted);
   Logger.log('Threads migrated: ' + _batchStats.threadsMigrated);
 
-  if (_batchStats.errors.length > 0) {
+  if (_batchStats.errors.length > 0)
+  {
     Logger.log('');
     Logger.log('ERRORS:');
-    for (var i = 0; i < _batchStats.errors.length; i++) {
+    for (var i = 0; i < _batchStats.errors.length; i++)
+    {
       Logger.log('  - ' + _batchStats.errors[i]);
     }
   }
@@ -512,11 +585,14 @@ function showBatchSummary() {
   var completed = getCompletedMigrations();
   var remaining = ORGANIZATION_PLAN.migrations.length - completed.length;
 
-  if (remaining > 0 && !CONFIG.DRY_RUN) {
+  if (remaining > 0 && !CONFIG.DRY_RUN)
+  {
     Logger.log('');
     Logger.log('REMAINING: ' + remaining + ' migrations');
     Logger.log('Run main() again to continue.');
-  } else if (remaining === 0 && !CONFIG.DRY_RUN) {
+  }
+  else if (remaining === 0 && !CONFIG.DRY_RUN)
+  {
     Logger.log('');
     Logger.log('ALL MIGRATIONS COMPLETE!');
     clearMigrationState();
@@ -530,26 +606,31 @@ function showBatchSummary() {
 // ============================================================================
 
 /**
- * Quick validation of the organization plan
- * Run this before main() to check for issues
+ * Quick validation of the organization plan.
+ * Run this before main() to check for issues.
  */
-function validatePlan() {
+function validatePlan()
+{
   log('Validating ORGANIZATION_PLAN...');
 
   var result = validateOrganizationPlan(ORGANIZATION_PLAN);
 
-  if (result.errors.length > 0) {
+  if (result.errors.length > 0)
+  {
     Logger.log('');
     Logger.log('ERRORS:');
-    for (var i = 0; i < result.errors.length; i++) {
+    for (var i = 0; i < result.errors.length; i++)
+    {
       Logger.log('  - ' + result.errors[i]);
     }
   }
 
-  if (result.warnings.length > 0) {
+  if (result.warnings.length > 0)
+  {
     Logger.log('');
     Logger.log('WARNINGS:');
-    for (var i = 0; i < result.warnings.length; i++) {
+    for (var i = 0; i < result.warnings.length; i++)
+    {
       Logger.log('  - ' + result.warnings[i]);
     }
   }
@@ -561,27 +642,34 @@ function validatePlan() {
 }
 
 /**
- * Preview what migrations would do without executing
+ * Preview what migrations would do without executing.
  */
-function previewMigrations() {
+function previewMigrations()
+{
   log('=== MIGRATION PREVIEW ===');
   log('');
 
   var total = ORGANIZATION_PLAN.migrations.length;
   var totalThreads = 0;
 
-  for (var i = 0; i < total; i++) {
+  for (var i = 0; i < total; i++)
+  {
     var migration = ORGANIZATION_PLAN.migrations[i];
     var fromLabel = GmailApp.getUserLabelByName(migration.from);
 
     var threadCount = 0;
     var status = '';
 
-    if (!fromLabel) {
+    if (!fromLabel)
+    {
       status = '[NOT FOUND]';
-    } else if (isMigrationCompleted(migration.from)) {
+    }
+    else if (isMigrationCompleted(migration.from))
+    {
       status = '[COMPLETED]';
-    } else {
+    }
+    else
+    {
       threadCount = getThreadCountForLabel(fromLabel);
       totalThreads += threadCount;
       status = threadCount + ' threads';
@@ -598,15 +686,17 @@ function previewMigrations() {
 }
 
 /**
- * Remove a specific label from all its threads
- * Useful for cleanup operations
+ * Remove a specific label from all its threads.
+ * Useful for cleanup operations.
  *
  * @param {string} labelName - Name of label to clear
  */
-function removeLabelFromAll(labelName) {
+function removeLabelFromAll(labelName)
+{
   var label = GmailApp.getUserLabelByName(labelName);
 
-  if (!label) {
+  if (!label)
+  {
     logError('Label not found: ' + labelName);
     return;
   }
@@ -619,19 +709,21 @@ function removeLabelFromAll(labelName) {
 }
 
 /**
- * Reset migration tracking to start fresh
- * Use this if you want to re-run migrations from the beginning
+ * Reset migration tracking to start fresh.
+ * Use this if you want to re-run migrations from the beginning.
  */
-function resetMigrations() {
+function resetMigrations()
+{
   resetAllMigrationTracking();
   log('Migration tracking has been reset.');
   log('Run main() to start migrations from the beginning.');
 }
 
 /**
- * Show current migration progress
+ * Show current migration progress.
  */
-function showProgress() {
+function showProgress()
+{
   showStatistics();
 
   var completed = getCompletedMigrations();
@@ -642,18 +734,22 @@ function showProgress() {
   Logger.log('Plan progress: ' + completed.length + '/' + total + ' migrations completed');
   Logger.log('Remaining: ' + remaining);
 
-  if (remaining > 0) {
+  if (remaining > 0)
+  {
     Logger.log('');
     Logger.log('Next migrations:');
     var count = 0;
-    for (var i = 0; i < ORGANIZATION_PLAN.migrations.length && count < 5; i++) {
+    for (var i = 0; i < ORGANIZATION_PLAN.migrations.length && count < 5; i++)
+    {
       var m = ORGANIZATION_PLAN.migrations[i];
-      if (!isMigrationCompleted(m.from)) {
+      if (!isMigrationCompleted(m.from))
+      {
         Logger.log('  - "' + m.from + '" -> "' + m.to + '"');
         count++;
       }
     }
-    if (remaining > 5) {
+    if (remaining > 5)
+    {
       Logger.log('  ... and ' + (remaining - 5) + ' more');
     }
   }
