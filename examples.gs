@@ -1,0 +1,385 @@
+/**
+ * Gmail Reorganization - Example Scripts
+ *
+ * This file contains ready-to-use example functions.
+ * Copy and modify these for your specific needs.
+ *
+ * REQUIRES: utils.gs (must be loaded first)
+ */
+
+// ============================================================================
+// QUICK START EXAMPLES
+// ============================================================================
+
+/**
+ * EXAMPLE 1: Quick Health Check
+ * Run this first to understand your Gmail's current state
+ */
+function example_healthCheck() {
+  Logger.log('=== GMAIL HEALTH CHECK ===');
+  Logger.log('');
+
+  // Get basic stats
+  var labels = GmailApp.getUserLabels();
+  var totalLabels = labels.length;
+
+  var emptyCount = 0;
+  var totalThreads = 0;
+  var largestLabel = '';
+  var largestCount = 0;
+
+  for (var i = 0; i < labels.length; i++) {
+    var count = getThreadCountForLabel(labels[i]);
+    totalThreads += count;
+    if (count === 0) emptyCount++;
+    if (count > largestCount) {
+      largestCount = count;
+      largestLabel = labels[i].getName();
+    }
+  }
+
+  Logger.log('Total labels: ' + totalLabels);
+  Logger.log('Empty labels: ' + emptyCount);
+  Logger.log('Total threads (with overlap): ' + totalThreads);
+  Logger.log('Largest label: "' + largestLabel + '" (' + largestCount + ' threads)');
+  Logger.log('');
+
+  // Recommendations
+  Logger.log('=== RECOMMENDATIONS ===');
+
+  if (totalLabels > 50) {
+    Logger.log('- You have many labels. Consider consolidating into 5-10 categories.');
+  }
+
+  if (emptyCount > 10) {
+    Logger.log('- You have ' + emptyCount + ' empty labels. Run deleteEmptyLabels(true) to review.');
+  }
+
+  if (totalLabels <= 20) {
+    Logger.log('- Your label count is manageable. Minor reorganization may suffice.');
+  }
+
+  Logger.log('');
+  Logger.log('Next steps:');
+  Logger.log('1. Run analyzeLabelStructure() for detailed analysis');
+  Logger.log('2. Run createLabelSummary() to export to spreadsheet');
+}
+
+/**
+ * EXAMPLE 2: Find Large Labels
+ * Identify labels that might need to be split up
+ */
+function example_findLargeLabels() {
+  var THRESHOLD = 100; // Labels with more than this many threads
+
+  Logger.log('=== LARGE LABELS (>' + THRESHOLD + ' threads) ===');
+  Logger.log('');
+
+  var labels = GmailApp.getUserLabels();
+  var largeLabels = [];
+
+  for (var i = 0; i < labels.length; i++) {
+    var count = getThreadCountForLabel(labels[i]);
+    if (count > THRESHOLD) {
+      largeLabels.push({
+        name: labels[i].getName(),
+        count: count
+      });
+    }
+  }
+
+  // Sort by count descending
+  largeLabels.sort(function(a, b) { return b.count - a.count; });
+
+  if (largeLabels.length === 0) {
+    Logger.log('No labels exceed ' + THRESHOLD + ' threads.');
+  } else {
+    for (var i = 0; i < largeLabels.length; i++) {
+      Logger.log(largeLabels[i].count + ' threads: ' + largeLabels[i].name);
+    }
+  }
+}
+
+/**
+ * EXAMPLE 3: List Root Labels Only
+ * See just your top-level organization
+ */
+function example_listRootLabels() {
+  Logger.log('=== ROOT-LEVEL LABELS ===');
+  Logger.log('');
+
+  var labels = GmailApp.getUserLabels();
+  var rootLabels = [];
+
+  for (var i = 0; i < labels.length; i++) {
+    var name = labels[i].getName();
+    if (name.indexOf('/') === -1) {
+      var count = getThreadCountForLabel(labels[i]);
+      rootLabels.push({
+        name: name,
+        count: count
+      });
+    }
+  }
+
+  rootLabels.sort(function(a, b) { return a.name.localeCompare(b.name); });
+
+  for (var i = 0; i < rootLabels.length; i++) {
+    Logger.log(rootLabels[i].name + ' (' + rootLabels[i].count + ' threads)');
+  }
+
+  Logger.log('');
+  Logger.log('Total root labels: ' + rootLabels.length);
+  Logger.log('Ideal: 5-10 categories');
+}
+
+// ============================================================================
+// SAMPLE ORGANIZATION PLANS
+// ============================================================================
+
+/**
+ * EXAMPLE 4: Apply Minimal Organization
+ * Creates just 5 top-level categories
+ */
+function example_minimalPlan() {
+  // Override the organization plan temporarily
+  var minimalPlan = {
+    newLabels: [
+      'Personal',
+      'Work',
+      'Finance',
+      'Shopping',
+      'Archive'
+    ],
+    migrations: [
+      // Add your specific migrations here
+      // {from: 'YourOldLabel', to: 'Personal'},
+    ]
+  };
+
+  // Validate and preview
+  Logger.log('=== MINIMAL ORGANIZATION PLAN ===');
+  Logger.log('');
+  Logger.log('This plan creates 5 simple categories:');
+  for (var i = 0; i < minimalPlan.newLabels.length; i++) {
+    Logger.log('  - ' + minimalPlan.newLabels[i]);
+  }
+
+  Logger.log('');
+  Logger.log('To use this plan:');
+  Logger.log('1. Copy the minimalPlan object to ORGANIZATION_PLAN in reorganization.gs');
+  Logger.log('2. Add your migration rules');
+  Logger.log('3. Run validatePlan() then main()');
+}
+
+/**
+ * EXAMPLE 5: Year-Based Archive Structure
+ * For organizing historical emails by year
+ */
+function example_yearBasedArchive() {
+  var currentYear = new Date().getFullYear();
+  var years = [];
+
+  // Generate labels for last 5 years
+  for (var i = 0; i < 5; i++) {
+    years.push('Archive/' + (currentYear - i));
+  }
+  years.push('Archive/Older');
+
+  Logger.log('=== YEAR-BASED ARCHIVE STRUCTURE ===');
+  Logger.log('');
+  Logger.log('Suggested archive labels:');
+  for (var i = 0; i < years.length; i++) {
+    Logger.log('  - ' + years[i]);
+  }
+
+  Logger.log('');
+  Logger.log('Add these to your ORGANIZATION_PLAN.newLabels');
+}
+
+// ============================================================================
+// CLEANUP EXAMPLES
+// ============================================================================
+
+/**
+ * EXAMPLE 6: Preview Empty Label Cleanup
+ * Shows what deleteEmptyLabels would remove
+ */
+function example_previewEmptyCleanup() {
+  deleteEmptyLabels(true); // true = dry run
+}
+
+/**
+ * EXAMPLE 7: Find Orphaned Nested Labels
+ * Labels whose parents don't exist
+ */
+function example_findOrphanedLabels() {
+  Logger.log('=== ORPHANED LABELS CHECK ===');
+  Logger.log('');
+
+  var labels = GmailApp.getUserLabels();
+  var labelNames = {};
+
+  // Build set of all label names
+  for (var i = 0; i < labels.length; i++) {
+    labelNames[labels[i].getName()] = true;
+  }
+
+  // Find orphans
+  var orphans = [];
+  for (var i = 0; i < labels.length; i++) {
+    var name = labels[i].getName();
+    var lastSlash = name.lastIndexOf('/');
+
+    if (lastSlash > 0) {
+      var parent = name.substring(0, lastSlash);
+      if (!labelNames[parent]) {
+        orphans.push({
+          label: name,
+          missingParent: parent
+        });
+      }
+    }
+  }
+
+  if (orphans.length === 0) {
+    Logger.log('No orphaned labels found.');
+  } else {
+    Logger.log('Found ' + orphans.length + ' orphaned labels:');
+    for (var i = 0; i < orphans.length; i++) {
+      Logger.log('  "' + orphans[i].label + '" (parent "' + orphans[i].missingParent + '" missing)');
+    }
+  }
+}
+
+// ============================================================================
+// MIGRATION HELPERS
+// ============================================================================
+
+/**
+ * EXAMPLE 8: Generate Migration Rules from Pattern
+ * Migrate all labels matching a pattern to a destination
+ */
+function example_generatePatternMigrations() {
+  var PATTERN = 'Old'; // Labels containing this string
+  var DESTINATION = 'Archive'; // Where to migrate them
+
+  Logger.log('=== PATTERN-BASED MIGRATION GENERATOR ===');
+  Logger.log('');
+  Logger.log('Finding labels containing: "' + PATTERN + '"');
+  Logger.log('');
+
+  var labels = GmailApp.getUserLabels();
+  var matches = [];
+
+  for (var i = 0; i < labels.length; i++) {
+    var name = labels[i].getName();
+    if (name.toLowerCase().indexOf(PATTERN.toLowerCase()) > -1) {
+      var count = getThreadCountForLabel(labels[i]);
+      matches.push({
+        name: name,
+        count: count
+      });
+    }
+  }
+
+  if (matches.length === 0) {
+    Logger.log('No labels match the pattern.');
+  } else {
+    Logger.log('Add these to your migrations array:');
+    Logger.log('');
+    for (var i = 0; i < matches.length; i++) {
+      Logger.log("  {from: '" + matches[i].name + "', to: '" + DESTINATION + "'}, // " + matches[i].count + ' threads');
+    }
+  }
+}
+
+/**
+ * EXAMPLE 9: Count Threads by Category Pattern
+ * See how many threads would go to each category
+ */
+function example_categoryDistribution() {
+  var categories = {
+    'personal': ['family', 'friend', 'personal', 'home'],
+    'work': ['work', 'job', 'office', 'client', 'project'],
+    'finance': ['bank', 'payment', 'receipt', 'tax', 'invoice'],
+    'shopping': ['order', 'shipping', 'amazon', 'ebay', 'store']
+  };
+
+  Logger.log('=== ESTIMATED CATEGORY DISTRIBUTION ===');
+  Logger.log('');
+
+  var labels = GmailApp.getUserLabels();
+  var results = {};
+
+  for (var cat in categories) {
+    results[cat] = {labels: 0, threads: 0};
+  }
+  results['other'] = {labels: 0, threads: 0};
+
+  for (var i = 0; i < labels.length; i++) {
+    var name = labels[i].getName().toLowerCase();
+    var count = getThreadCountForLabel(labels[i]);
+    var matched = false;
+
+    for (var cat in categories) {
+      var keywords = categories[cat];
+      for (var j = 0; j < keywords.length; j++) {
+        if (name.indexOf(keywords[j]) > -1) {
+          results[cat].labels++;
+          results[cat].threads += count;
+          matched = true;
+          break;
+        }
+      }
+      if (matched) break;
+    }
+
+    if (!matched) {
+      results['other'].labels++;
+      results['other'].threads += count;
+    }
+  }
+
+  for (var cat in results) {
+    Logger.log(cat.toUpperCase() + ': ' + results[cat].labels + ' labels, ~' + results[cat].threads + ' threads');
+  }
+}
+
+/**
+ * EXAMPLE 10: Test Single Migration
+ * Dry-run test of moving one label
+ */
+function example_testSingleMigration() {
+  var FROM_LABEL = 'TestLabel'; // Change this
+  var TO_LABEL = 'Archive/Test'; // Change this
+
+  Logger.log('=== SINGLE MIGRATION TEST ===');
+  Logger.log('');
+  Logger.log('From: "' + FROM_LABEL + '"');
+  Logger.log('To: "' + TO_LABEL + '"');
+  Logger.log('');
+
+  var fromLabel = GmailApp.getUserLabelByName(FROM_LABEL);
+
+  if (!fromLabel) {
+    Logger.log('ERROR: Source label "' + FROM_LABEL + '" not found.');
+    Logger.log('Run listAllLabelsDetailed() to see your labels.');
+    return;
+  }
+
+  var threads = getAllThreadsFromLabel(fromLabel);
+  Logger.log('Threads to migrate: ' + threads.length);
+
+  if (threads.length > 0) {
+    Logger.log('');
+    Logger.log('Sample threads:');
+    for (var i = 0; i < Math.min(5, threads.length); i++) {
+      Logger.log('  - ' + threads[i].getFirstMessageSubject());
+    }
+  }
+
+  Logger.log('');
+  Logger.log('To execute this migration, add to ORGANIZATION_PLAN.migrations:');
+  Logger.log("  {from: '" + FROM_LABEL + "', to: '" + TO_LABEL + "'}");
+}
