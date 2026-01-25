@@ -317,8 +317,12 @@ function displayCategoryAnalysis(labelData) {
   }
 
   Logger.log('');
-  Logger.log('UNCATEGORIZED: ' + categories.uncategorized.count + ' labels');
-  Logger.log('(These will need manual review for your organization plan)');
+  if (categories.uncategorized && categories.uncategorized.count > 0) {
+    Logger.log('UNCATEGORIZED: ' + categories.uncategorized.count + ' labels');
+    Logger.log('(These will need manual review for your organization plan)');
+  } else {
+    Logger.log('All labels have been categorized!');
+  }
   Logger.log('');
 }
 
@@ -395,7 +399,6 @@ function visualizeLabelHierarchy() {
   Logger.log('=== LABEL HIERARCHY TREE ===');
   Logger.log('');
 
-  var currentParent = '';
   for (var i = 0; i < labelNames.length; i++) {
     var name = labelNames[i];
     var level = (name.match(/\//g) || []).length;

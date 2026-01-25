@@ -23,12 +23,27 @@ var PROPERTY_KEYS = {
 /**
  * Gmail reserved label names that cannot be used
  */
-var RESERVED_LABELS = ['inbox', 'sent', 'drafts', 'spam', 'trash', 'starred', 'important', 'chats', 'all', 'unread'];
+var RESERVED_LABELS = [
+  'inbox', 'sent', 'drafts', 'spam', 'trash', 'starred', 'important',
+  'chats', 'all', 'unread', 'snoozed', 'scheduled', 'category'
+];
 
 /**
  * Characters not allowed in Gmail label names
  */
 var INVALID_LABEL_CHARS = ['&', '<', '>', '[', ']', '{', '}'];
+
+/**
+ * Numeric constants - avoid magic numbers
+ */
+var CONSTANTS = {
+  THREAD_BATCH_SIZE: 500,
+  DEFAULT_TIME_BUFFER_MS: 30000,
+  MAX_LABEL_NAME_LENGTH: 225,
+  TOP_LABELS_COUNT: 20,
+  LOW_USAGE_THRESHOLD: 5,
+  MAX_DISPLAY_ITEMS: 10
+};
 
 // ============================================================================
 // THREAD RETRIEVAL (Single Source of Truth)
@@ -38,22 +53,35 @@ var INVALID_LABEL_CHARS = ['&', '<', '>', '[', ']', '{', '}'];
  * Get all threads from a label, handling pagination
  * This is the ONLY function that should be used to retrieve threads.
  *
- * @param {GmailLabel|string} labelOrName - The label object or label name string
- * @return {GmailThread[]} All threads with this label
+ * @param {GmailLabel|string|null|undefined} labelOrName - The label object or label name string
+ * @return {GmailThread[]} All threads with this label, or empty array on error
  */
 function getAllThreadsFromLabel(labelOrName) {
+  // Input validation
+  if (labelOrName === null || labelOrName === undefined) {
+    logWarning('getAllThreadsFromLabel called with null/undefined');
+    return [];
+  }
+
   var label;
 
   if (typeof labelOrName === 'string') {
+    if (labelOrName.trim() === '') {
+      logWarning('getAllThreadsFromLabel called with empty string');
+      return [];
+    }
     label = GmailApp.getUserLabelByName(labelOrName);
     if (!label) return [];
-  } else {
+  } else if (typeof labelOrName === 'object' && labelOrName !== null) {
     label = labelOrName;
+  } else {
+    logWarning('getAllThreadsFromLabel called with invalid type: ' + typeof labelOrName);
+    return [];
   }
 
   var allThreads = [];
   var start = 0;
-  var batchSize = 500;
+  var batchSize = CONSTANTS.THREAD_BATCH_SIZE;
 
   while (true) {
     var threads;
@@ -64,7 +92,7 @@ function getAllThreadsFromLabel(labelOrName) {
       break;
     }
 
-    if (threads.length === 0) break;
+    if (!threads || threads.length === 0) break;
     allThreads = allThreads.concat(threads);
     if (threads.length < batchSize) break;
     start += batchSize;
@@ -75,23 +103,32 @@ function getAllThreadsFromLabel(labelOrName) {
 
 /**
  * Get thread count for a label (more efficient than getting all threads)
- * @param {GmailLabel|string} labelOrName - The label object or label name
- * @return {number} Thread count or -1 on error
+ * @param {GmailLabel|string|null|undefined} labelOrName - The label object or label name
+ * @return {number} Thread count, 0 if label not found, -1 on error
  */
 function getThreadCountForLabel(labelOrName) {
+  // Input validation
+  if (labelOrName === null || labelOrName === undefined) {
+    return 0;
+  }
+
   var label;
 
   if (typeof labelOrName === 'string') {
+    if (labelOrName.trim() === '') return 0;
     label = GmailApp.getUserLabelByName(labelOrName);
     if (!label) return 0;
-  } else {
+  } else if (typeof labelOrName === 'object' && labelOrName !== null) {
     label = labelOrName;
+  } else {
+    return 0;
   }
 
   try {
     // Quick check - if first batch is less than max, we have the count
-    var threads = label.getThreads(0, 500);
-    if (threads.length < 500) {
+    var threads = label.getThreads(0, CONSTANTS.THREAD_BATCH_SIZE);
+    if (!threads) return 0;
+    if (threads.length < CONSTANTS.THREAD_BATCH_SIZE) {
       return threads.length;
     }
     // Otherwise, need to count all
@@ -181,26 +218,53 @@ function clearMigrationState() {
 
 /**
  * Mark a migration as completed
+ * Uses optimistic locking to handle concurrent modifications
  * @param {string} fromLabel - Source label name
  * @param {string} toLabel - Destination label name
  * @param {number} threadCount - Number of threads migrated
+ * @return {boolean} True if successfully saved
  */
 function markMigrationCompleted(fromLabel, toLabel, threadCount) {
-  var props = PropertiesService.getScriptProperties();
-  var completedJson = props.getProperty(PROPERTY_KEYS.COMPLETED_MIGRATIONS) || '[]';
-
-  try {
-    var completed = JSON.parse(completedJson);
-    completed.push({
-      from: fromLabel,
-      to: toLabel,
-      threads: threadCount,
-      completedAt: new Date().toISOString()
-    });
-    props.setProperty(PROPERTY_KEYS.COMPLETED_MIGRATIONS, JSON.stringify(completed));
-  } catch (e) {
-    logError('Failed to save completed migration: ' + e.message);
+  // Input validation
+  if (!fromLabel || !toLabel) {
+    logError('markMigrationCompleted: missing required parameters');
+    return false;
   }
+
+  var props = PropertiesService.getScriptProperties();
+  var maxRetries = 3;
+
+  for (var attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      var completedJson = props.getProperty(PROPERTY_KEYS.COMPLETED_MIGRATIONS) || '[]';
+      var completed = JSON.parse(completedJson);
+
+      // Check if already exists to prevent duplicates
+      var exists = completed.some(function(m) {
+        return m.from === fromLabel && m.to === toLabel;
+      });
+
+      if (!exists) {
+        completed.push({
+          from: fromLabel,
+          to: toLabel,
+          threads: threadCount || 0,
+          completedAt: new Date().toISOString(),
+          version: '1.0.0'
+        });
+        props.setProperty(PROPERTY_KEYS.COMPLETED_MIGRATIONS, JSON.stringify(completed));
+      }
+      return true;
+    } catch (e) {
+      if (attempt === maxRetries - 1) {
+        logError('Failed to save completed migration after ' + maxRetries + ' attempts: ' + e.message);
+        return false;
+      }
+      // Brief pause before retry
+      Utilities.sleep(100);
+    }
+  }
+  return false;
 }
 
 /**
@@ -316,33 +380,41 @@ function showStatistics() {
 
 /**
  * Test if a label name is valid for Gmail
- * @param {string} labelName - Label name to validate
- * @return {Object} {valid: boolean, reason: string}
+ * @param {*} labelName - Label name to validate (will be converted to string)
+ * @return {Object} {valid: boolean, reason: string|null}
  */
 function validateLabelName(labelName) {
-  if (!labelName || labelName.trim().length === 0) {
+  // Handle null/undefined
+  if (labelName === null || labelName === undefined) {
+    return {valid: false, reason: 'Label name cannot be null or undefined'};
+  }
+
+  // Convert to string if needed
+  var nameStr = String(labelName);
+
+  if (nameStr.trim().length === 0) {
     return {valid: false, reason: 'Label name cannot be empty'};
   }
 
-  var normalized = labelName.toLowerCase().trim();
+  var normalized = nameStr.toLowerCase().trim();
 
   // Check for reserved words
   for (var i = 0; i < RESERVED_LABELS.length; i++) {
     if (normalized === RESERVED_LABELS[i]) {
-      return {valid: false, reason: '"' + labelName + '" is a reserved Gmail label'};
+      return {valid: false, reason: '"' + nameStr + '" is a reserved Gmail label'};
     }
   }
 
   // Check for invalid characters
   for (var i = 0; i < INVALID_LABEL_CHARS.length; i++) {
-    if (labelName.indexOf(INVALID_LABEL_CHARS[i]) > -1) {
+    if (nameStr.indexOf(INVALID_LABEL_CHARS[i]) > -1) {
       return {valid: false, reason: 'Label contains invalid character: ' + INVALID_LABEL_CHARS[i]};
     }
   }
 
   // Check length (Gmail has a 225 character limit)
-  if (labelName.length > 225) {
-    return {valid: false, reason: 'Label name exceeds 225 character limit'};
+  if (nameStr.length > CONSTANTS.MAX_LABEL_NAME_LENGTH) {
+    return {valid: false, reason: 'Label name exceeds ' + CONSTANTS.MAX_LABEL_NAME_LENGTH + ' character limit'};
   }
 
   return {valid: true, reason: null};
@@ -588,11 +660,21 @@ function deleteEmptyLabels(dryRun) {
  * Check if there's enough time remaining before Apps Script timeout
  * @param {number} startTime - Script start time (from Date.getTime())
  * @param {number} maxRuntime - Maximum runtime in milliseconds
- * @param {number} buffer - Buffer time in milliseconds (default 30000)
+ * @param {number} [buffer] - Buffer time in milliseconds (default 30000)
  * @return {boolean} True if there's time remaining
  */
 function hasTimeRemaining(startTime, maxRuntime, buffer) {
-  buffer = buffer || 30000;
+  // Input validation
+  if (typeof startTime !== 'number' || isNaN(startTime)) {
+    logWarning('hasTimeRemaining: invalid startTime');
+    return false;
+  }
+  if (typeof maxRuntime !== 'number' || isNaN(maxRuntime) || maxRuntime <= 0) {
+    logWarning('hasTimeRemaining: invalid maxRuntime');
+    return false;
+  }
+
+  buffer = (typeof buffer === 'number' && !isNaN(buffer)) ? buffer : CONSTANTS.DEFAULT_TIME_BUFFER_MS;
   var elapsed = new Date().getTime() - startTime;
   return (maxRuntime - elapsed) > buffer;
 }

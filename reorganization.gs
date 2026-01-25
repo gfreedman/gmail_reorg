@@ -194,20 +194,30 @@ var EXAMPLE_PLAN_GTD = {
 // MAIN FUNCTIONS
 // ============================================================================
 
-var startTime;
-var batchStats = {
-  labelsCreated: 0,
-  threadsMigrated: 0,
-  migrationsCompleted: 0,
-  errors: []
-};
+/**
+ * Create a fresh batch stats object to avoid global state pollution
+ * @return {Object} New batch stats object
+ */
+function createBatchStats() {
+  return {
+    labelsCreated: 0,
+    threadsMigrated: 0,
+    migrationsCompleted: 0,
+    errors: [],
+    startTime: new Date().getTime()
+  };
+}
+
+// Module-level state (reset on each main() call)
+var _batchStats = null;
 
 /**
  * Main entry point for reorganization
  * Run this function to start or resume the migration
  */
 function main() {
-  startTime = new Date().getTime();
+  // Initialize fresh state for this run
+  _batchStats = createBatchStats();
 
   log('========================================');
   log('GMAIL REORGANIZATION');
@@ -223,7 +233,7 @@ function main() {
   }
 
   // Step 2: Create new label structure
-  if (hasTimeRemaining(startTime, CONFIG.MAX_RUNTIME_MS)) {
+  if (hasTimeRemaining(_batchStats.startTime, CONFIG.MAX_RUNTIME_MS)) {
     createNewLabelStructure();
   } else {
     logWarning('Time limit reached after validation. Run again to continue.');
@@ -231,7 +241,7 @@ function main() {
   }
 
   // Step 3: Execute migrations
-  if (hasTimeRemaining(startTime, CONFIG.MAX_RUNTIME_MS)) {
+  if (hasTimeRemaining(_batchStats.startTime, CONFIG.MAX_RUNTIME_MS)) {
     migrateLabels();
   } else {
     logWarning('Time limit reached after creating labels. Run again to continue.');
@@ -241,7 +251,7 @@ function main() {
   showBatchSummary();
 
   // Update statistics
-  updateStatistics(batchStats.threadsMigrated, batchStats.labelsCreated);
+  updateStatistics(__batchStats.threadsMigrated, __batchStats.labelsCreated);
 }
 
 /**
@@ -287,7 +297,7 @@ function createNewLabelStructure() {
   var skipped = 0;
 
   for (var i = 0; i < ORGANIZATION_PLAN.newLabels.length; i++) {
-    if (!hasTimeRemaining(startTime, CONFIG.MAX_RUNTIME_MS)) {
+    if (!hasTimeRemaining(_batchStats.startTime, CONFIG.MAX_RUNTIME_MS)) {
       logWarning('Time limit reached during label creation');
       break;
     }
@@ -309,14 +319,14 @@ function createNewLabelStructure() {
         GmailApp.createLabel(labelName);
         log('  Created: ' + labelName);
         created++;
-        batchStats.labelsCreated++;
+        _batchStats.labelsCreated++;
       } else {
         log('  [DRY RUN] Would create: ' + labelName);
         created++;
       }
     } catch (e) {
       logError('Failed to create "' + labelName + '": ' + e.message);
-      batchStats.errors.push('Label creation: ' + labelName + ' - ' + e.message);
+      _batchStats.errors.push('Label creation: ' + labelName + ' - ' + e.message);
     }
   }
 
@@ -343,7 +353,7 @@ function migrateLabels() {
 
   for (var i = 0; i < migrations.length; i++) {
     // Check time remaining
-    if (!hasTimeRemaining(startTime, CONFIG.MAX_RUNTIME_MS)) {
+    if (!hasTimeRemaining(_batchStats.startTime, CONFIG.MAX_RUNTIME_MS)) {
       log('Time limit reached at migration ' + (i + 1) + '/' + totalMigrations);
       saveMigrationState({
         lastMigrationIndex: i,
@@ -369,8 +379,8 @@ function migrateLabels() {
 
     if (result.success) {
       completed++;
-      batchStats.migrationsCompleted++;
-      batchStats.threadsMigrated += result.threadCount;
+      _batchStats.migrationsCompleted++;
+      _batchStats.threadsMigrated += result.threadCount;
 
       // Mark as completed for resume capability
       if (!CONFIG.DRY_RUN) {
@@ -420,7 +430,7 @@ function migrateSingleLabel(fromLabelName, toLabelName) {
       if (!toLabel) {
         toLabel = GmailApp.createLabel(toLabelName);
         log('    Created destination label: ' + toLabelName);
-        batchStats.labelsCreated++;
+        _batchStats.labelsCreated++;
       }
 
       // Apply new label in batches
@@ -436,7 +446,7 @@ function migrateSingleLabel(fromLabelName, toLabelName) {
     } catch (e) {
       logError('Migration failed for "' + fromLabelName + '": ' + e.message);
       result.error = e.message;
-      batchStats.errors.push('Migration: ' + fromLabelName + ' - ' + e.message);
+      _batchStats.errors.push('Migration: ' + fromLabelName + ' - ' + e.message);
     }
   } else {
     log('    [DRY RUN] Would migrate ' + threads.length + ' threads');
@@ -479,22 +489,22 @@ function removeOldLabel(threads, label) {
  * Show summary of this batch run
  */
 function showBatchSummary() {
-  var elapsed = Math.round((new Date().getTime() - startTime) / 1000);
+  var elapsed = Math.round((new Date().getTime() - _batchStats.startTime) / 1000);
 
   Logger.log('');
   Logger.log('========================================');
   Logger.log('BATCH SUMMARY');
   Logger.log('========================================');
   Logger.log('Runtime: ' + elapsed + ' seconds');
-  Logger.log('Labels created: ' + batchStats.labelsCreated);
-  Logger.log('Migrations completed: ' + batchStats.migrationsCompleted);
-  Logger.log('Threads migrated: ' + batchStats.threadsMigrated);
+  Logger.log('Labels created: ' + _batchStats.labelsCreated);
+  Logger.log('Migrations completed: ' + _batchStats.migrationsCompleted);
+  Logger.log('Threads migrated: ' + _batchStats.threadsMigrated);
 
-  if (batchStats.errors.length > 0) {
+  if (_batchStats.errors.length > 0) {
     Logger.log('');
     Logger.log('ERRORS:');
-    for (var i = 0; i < batchStats.errors.length; i++) {
-      Logger.log('  - ' + batchStats.errors[i]);
+    for (var i = 0; i < _batchStats.errors.length; i++) {
+      Logger.log('  - ' + _batchStats.errors[i]);
     }
   }
 

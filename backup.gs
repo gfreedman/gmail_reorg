@@ -133,10 +133,16 @@ function createBackup() {
  * Extract data from a thread for backup
  * @param {GmailThread} thread - The thread to extract data from
  * @return {Array} Row data array
+ * @throws {Error} If thread has no messages
  */
 function extractThreadData(thread) {
-  var firstMessage = thread.getMessages()[0];
-  var allLabels = thread.getLabels().map(function(l) { return l.getName(); }).join(', ');
+  var messages = thread.getMessages();
+  if (!messages || messages.length === 0) {
+    throw new Error('Thread has no messages');
+  }
+  var firstMessage = messages[0];
+  var labels = thread.getLabels();
+  var allLabels = labels ? labels.map(function(l) { return l.getName(); }).join(', ') : '';
 
   var rowData = [
     thread.getId(),
