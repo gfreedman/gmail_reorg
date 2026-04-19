@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gmail Reorg — Clean up years of label chaos</title>
+  <meta name="description" content="For Gmail users with years of accumulated labels who want a clean structure without losing a single email.">
+  <meta property="og:title" content="Gmail Reorg — Clean up years of label chaos">
+  <meta property="og:description" content="For Gmail users with years of accumulated labels who want a clean structure without losing a single email.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://gfreedman.github.io/gmail_reorg/">
+  <meta name="twitter:card" content="summary">
+
+  <style>
+    /* ===== Tokens ===== */
+    :root {
+      --bg:           #ffffff;
+      --bg-alt:       #f5f5f7;
+      --text:         #1d1d1f;
+      --text-body:    #6e6e73;
+      --text-muted:   #86868b;
+      --accent:       #0071e3;
+      --accent-hover: #0077ed;
+      --accent-dim:   #dbeafe;
+      --border:       #d2d2d7;
+      --green:        #248a3d;
+      --green-bg:     #e3f6e9;
+      --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
+      --sp-5: 20px; --sp-6: 24px; --sp-8: 32px;
+      --sp-10: 40px; --sp-12: 48px; --sp-16: 64px;
+      --max-w: 980px;
+      --r:    12px;
+      --r-sm:  8px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        transition-duration: 0.01ms !important;
+        animation-duration:  0.01ms !important;
+      }
+    }
+
+    /* ===== Reset ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html  { scroll-behavior: smooth; }
+    body  {
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+      font-size: 17px; line-height: 1.6;
+      color: var(--text); background: var(--bg);
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code {
+      font-family: "SF Mono", ui-monospace, Menlo, monospace;
+      font-size: 13px;
+      background: var(--bg-alt);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+
+    /* ===== Skip link ===== */
+    .skip-link {
+      position: absolute; left: -9999px; top: var(--sp-4);
+      z-index: 9999; background: var(--accent); color: #fff;
+      padding: var(--sp-2) var(--sp-4); border-radius: var(--r-sm);
+      font-size: 14px;
+    }
+    .skip-link:focus { left: var(--sp-4); }
+
+    /* ===== Nav ===== */
+    nav {
+      position: sticky; top: 0; z-index: 100; height: 52px;
+      background: rgba(255,255,255,0.8);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      max-width: var(--max-w); margin: 0 auto; padding: 0 22px;
+      height: 100%; display: flex; align-items: center; justify-content: space-between;
+    }
+    .nav-brand { font-size: 15px; font-weight: 600; color: var(--text); }
+    .nav-links  { display: flex; gap: var(--sp-8); list-style: none; }
+    .nav-links a {
+      font-size: 12px; color: var(--text-body); opacity: 0.76;
+      transition: opacity .15s, color .15s;
+    }
+    .nav-links a:hover,
+    .nav-links a.active { opacity: 1; color: var(--accent); text-decoration: none; }
+
+    /* Hamburger */
+    .nav-hamburger {
+      display: none; background: none; border: none;
+      cursor: pointer; padding: var(--sp-2); color: var(--text);
+    }
+    .nav-hamburger svg { display: block; }
+
+    /* Mobile drawer */
+    .nav-mobile:not([hidden]) {
+      position: absolute; top: 52px; left: 0; right: 0;
+      background: var(--bg); border-bottom: 1px solid var(--border);
+      padding: var(--sp-4) 22px var(--sp-6);
+      display: flex; flex-direction: column; gap: 0;
+      z-index: 99;
+    }
+    .nav-mobile a {
+      font-size: 17px; color: var(--text);
+      padding: var(--sp-4) 0;
+      border-bottom: 1px solid var(--border);
+      text-decoration: none;
+    }
+    .nav-mobile a:last-child { border-bottom: none; }
+    .nav-mobile a:hover { color: var(--accent); }
+
+    @media (max-width: 560px) {
+      .nav-links    { display: none; }
+      .nav-hamburger { display: flex; align-items: center; }
+    }
+
+    /* ===== Section shell ===== */
+    section { padding: var(--sp-16) 22px; }
+    .alt    { background: var(--bg-alt); }
+    .container { max-width: var(--max-w); margin: 0 auto; }
+
+    /* ===== Eyebrow ===== */
+    .eyebrow {
+      font-size: 12px; font-weight: 600;
+      letter-spacing: 0.5px; text-transform: uppercase;
+      color: var(--accent); margin-bottom: var(--sp-3);
+    }
+
+    /* ===== Headings ===== */
+    h1 {
+      font-size: clamp(40px, 7vw, 68px);
+      font-weight: 700; line-height: 1.05; letter-spacing: -1.5px;
+      color: var(--text);
+    }
+    h2 {
+      font-size: clamp(28px, 4vw, 40px);
+      font-weight: 600; line-height: 1.1; letter-spacing: -0.5px;
+      color: var(--text); margin-bottom: var(--sp-4);
+    }
+    .section-sub {
+      font-size: 17px; color: var(--text-body);
+      max-width: 600px; margin-bottom: var(--sp-10);
+    }
+
+    /* ===== Hero ===== */
+    #hero {
+      padding: 100px 22px var(--sp-16);
+      text-align: center;
+    }
+    #hero h1 {
+      margin-bottom: var(--sp-6);
+      max-width: 800px; margin-left: auto; margin-right: auto;
+    }
+    .hero-sub {
+      font-size: 19px; color: var(--text-body);
+      max-width: 520px; margin: 0 auto var(--sp-10);
+    }
+
+    /* ===== Buttons ===== */
+    .btn-group {
+      display: flex; gap: var(--sp-4);
+      justify-content: center; flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex; align-items: center; gap: var(--sp-2);
+      padding: 10px 22px; border-radius: 980px;
+      font-size: 15px; font-weight: 500; cursor: pointer;
+      text-decoration: none;
+      transition: opacity .12s, background .15s;
+    }
+    .btn:hover { text-decoration: none; }
+    .btn-primary { background: var(--accent); color: #fff; border: none; }
+    .btn-primary:hover { background: var(--accent-hover); opacity: 1; }
+    .btn-ghost {
+      background: transparent; color: var(--accent);
+      border: 1.5px solid var(--accent);
+    }
+    .btn-ghost:hover { background: var(--accent-dim); }
+
+    /* ===== Safety scorecard ===== */
+    .scorecard {
+      margin-top: var(--sp-10);
+      display: flex; flex-direction: column; gap: var(--sp-3);
+    }
+    .score-row {
+      display: flex; align-items: center; gap: var(--sp-4);
+      padding: var(--sp-4) var(--sp-6);
+      background: var(--bg); border-radius: var(--r);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      border: 1px solid transparent;
+    }
+    .score-badge {
+      font-size: 12px; font-weight: 600;
+      padding: 2px 10px; border-radius: 980px;
+      flex-shrink: 0; min-width: 96px; text-align: center;
+    }
+    .badge-safe   { background: var(--green-bg); color: var(--green); }
+    .badge-manual { background: #fff3e0; color: #b45309; }
+    .score-label { font-size: 15px; font-weight: 600; color: var(--text); flex: 1; }
+    .score-desc  { font-size: 14px; color: var(--text-body); text-align: right; }
+
+    /* ===== Callout ===== */
+    .callout {
+      background: var(--accent-dim); border-radius: var(--r);
+      padding: var(--sp-5) var(--sp-6); margin-top: var(--sp-8);
+    }
+    .callout p { font-size: 15px; color: var(--text); }
+    .callout strong { color: var(--accent); }
+
+    /* ===== Pipeline ===== */
+    .pipeline {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: var(--sp-6); margin-top: var(--sp-10);
+    }
+    .phase {
+      background: var(--bg); border-radius: var(--r);
+      padding: var(--sp-6); box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+      border: 1px solid var(--border);
+    }
+    .phase-num {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: var(--accent-dim); color: var(--accent);
+      font-size: 14px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: var(--sp-4);
+    }
+    .phase h3 { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: var(--sp-2); }
+    .phase p  { font-size: 14px; color: var(--text-body); }
+    .phase-status {
+      font-size: 11px; font-weight: 600;
+      margin-top: var(--sp-3); padding: 2px 8px;
+      border-radius: 980px; display: inline-block;
+    }
+    .status-readonly { background: var(--green-bg); color: var(--green); }
+    .status-writes   { background: var(--accent-dim); color: var(--accent); }
+    .status-manual   { background: #fff3e0; color: #b45309; }
+
+    /* ===== Steps (Get started) ===== */
+    .steps { display: flex; flex-direction: column; gap: var(--sp-10); margin-top: var(--sp-10); }
+    .step  { display: grid; grid-template-columns: 40px 1fr; gap: var(--sp-6); }
+    .step-num {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: var(--accent); color: #fff;
+      font-size: 16px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .step-content h3 { font-size: 17px; font-weight: 600; color: var(--text); margin-bottom: var(--sp-2); }
+    .step-content p  { font-size: 15px; color: var(--text-body); margin-bottom: var(--sp-4); }
+    .step-content p:last-child { margin-bottom: 0; }
+
+    /* ===== Terminal / code blocks ===== */
+    .term {
+      background: #1c1c1e; border-radius: var(--r);
+      overflow: hidden; position: relative; margin-top: var(--sp-5);
+    }
+    .term-bar {
+      background: #2c2c2e; padding: var(--sp-2) var(--sp-4);
+      display: flex; align-items: center; gap: var(--sp-2);
+    }
+    .term-dot { width: 12px; height: 12px; border-radius: 50%; }
+    .term-dot:nth-child(1) { background: #ff5f57; }
+    .term-dot:nth-child(2) { background: #febc2e; }
+    .term-dot:nth-child(3) { background: #28c840; }
+    .term-label { font-size: 12px; color: #98989d; margin-left: auto; }
+    .term-body {
+      padding: var(--sp-6);
+      font-family: "SF Mono", ui-monospace, Menlo, monospace;
+      font-size: 14px; line-height: 1.7; color: #f5f5f7;
+      overflow-x: auto;
+    }
+    .cmd     { color: #f5f5f7; }
+    .comment { color: #636366; }
+    .output  { color: #98989d; }
+    .kw      { color: #fc5fa3; }
+    .str     { color: #fc6a5d; }
+    .prop    { color: #67b7a4; }
+
+    .copy-btn {
+      position: absolute; top: var(--sp-2); right: var(--sp-4);
+      background: rgba(255,255,255,0.10); color: #f5f5f7;
+      border: 1px solid rgba(255,255,255,0.16); border-radius: var(--r-sm);
+      padding: 3px var(--sp-3); font-size: 12px; cursor: pointer;
+      opacity: 0.38; transition: opacity .15s; font-family: inherit;
+    }
+    .copy-btn:hover,
+    .copy-btn:focus { opacity: 1; outline: 2px solid rgba(255,255,255,0.4); }
+
+    /* ===== Templates ===== */
+    .template-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: var(--sp-6); margin-top: var(--sp-10);
+    }
+    .template-card {
+      background: var(--bg); border-radius: var(--r);
+      padding: var(--sp-6); box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+      border: 1px solid var(--border);
+    }
+    .template-card h3 { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: var(--sp-3); }
+    .tag {
+      font-size: 11px; font-weight: 600; padding: 2px 8px;
+      border-radius: 980px; background: var(--accent-dim); color: var(--accent);
+      margin-bottom: var(--sp-4); display: inline-block;
+    }
+    .label-list { list-style: none; display: flex; flex-direction: column; gap: var(--sp-1); }
+    .label-list li {
+      font-size: 13px; font-family: "SF Mono", ui-monospace, Menlo, monospace;
+      color: var(--text-body); padding: 2px var(--sp-3);
+      background: var(--bg-alt); border-radius: 4px;
+    }
+    .label-list .sub { margin-left: var(--sp-6); }
+
+    /* ===== Reverse / Undo ===== */
+    .reverse-steps { margin-top: var(--sp-8); display: flex; flex-direction: column; gap: var(--sp-3); counter-reset: rstep; }
+    .rstep {
+      display: flex; gap: var(--sp-4); align-items: flex-start;
+      counter-increment: rstep;
+    }
+    .rstep-num {
+      width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+      background: var(--bg-alt); border: 1.5px solid var(--border);
+      color: var(--text-body); font-size: 13px; font-weight: 600;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .rstep p { font-size: 15px; color: var(--text-body); padding-top: 2px; }
+
+    /* ===== FAQ ===== */
+    .faq-list { margin-top: var(--sp-10); border-top: 1px solid var(--border); }
+    details { border-bottom: 1px solid var(--border); }
+    summary {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: var(--sp-5) 0; font-size: 17px; font-weight: 500;
+      cursor: pointer; color: var(--text); list-style: none; gap: var(--sp-4);
+    }
+    summary::-webkit-details-marker { display: none; }
+    .faq-icon {
+      font-size: 22px; font-weight: 300; color: var(--text-muted);
+      transition: transform .2s; flex-shrink: 0;
+    }
+    details[open] .faq-icon { transform: rotate(45deg); }
+    .faq-answer {
+      padding: 0 0 var(--sp-5);
+      font-size: 15px; color: var(--text-body); max-width: 680px;
+    }
+
+    /* ===== Limitations ===== */
+    .limit-list { margin-top: var(--sp-8); display: flex; flex-direction: column; gap: var(--sp-4); }
+    .limit-item { display: flex; gap: var(--sp-4); align-items: flex-start; }
+    .limit-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--text-muted); flex-shrink: 0; margin-top: 9px;
+    }
+    .limit-item p { font-size: 15px; color: var(--text-body); }
+
+    /* ===== Footer ===== */
+    footer {
+      background: var(--bg-alt); border-top: 1px solid var(--border);
+      padding: var(--sp-12) 22px; text-align: center;
+    }
+    .footer-inner {
+      max-width: var(--max-w); margin: 0 auto;
+      display: flex; flex-direction: column; gap: var(--sp-3);
+    }
+    footer strong { color: var(--text); font-size: 15px; }
+    footer p      { font-size: 14px; color: var(--text-muted); }
+    footer a { color: var(--text-muted); }
+    footer a:hover { color: var(--accent); }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 560px) {
+      section { padding: var(--sp-12) 22px; }
+      #hero   { padding: var(--sp-12) 22px; }
+      .score-desc { display: none; }
+    }
+
+    @media (max-width: 360px) {
+      .btn-group { flex-direction: column; align-items: center; }
+    }
+  </style>
+</head>
+<body>
+
+<a href="#main-content" class="skip-link">Skip to main content</a>
+
+<nav aria-label="Main navigation">
+  <div class="nav-inner">
+    <span class="nav-brand">Gmail Reorg</span>
+    <ul class="nav-links" role="list">
+      <li><a href="#trust">Safety</a></li>
+      <li><a href="#how-it-works">How it works</a></li>
+      <li><a href="#get-started">Get started</a></li>
+      <li><a href="#templates">Templates</a></li>
+      <li><a href="#faq">FAQ</a></li>
+      <li><a href="https://github.com/gfreedman/gmail_reorg" target="_blank" rel="noopener">GitHub</a></li>
+    </ul>
+    <button class="nav-hamburger"
+            aria-label="Open navigation menu"
+            aria-expanded="false"
+            aria-controls="mobile-nav">
+      <svg id="hamburger-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <rect y="3"  width="20" height="2" rx="1" fill="currentColor"/>
+        <rect y="9"  width="20" height="2" rx="1" fill="currentColor"/>
+        <rect y="15" width="20" height="2" rx="1" fill="currentColor"/>
+      </svg>
+    </button>
+  </div>
+  <nav class="nav-mobile" id="mobile-nav" aria-label="Mobile navigation" hidden>
+    <a href="#trust">Safety</a>
+    <a href="#how-it-works">How it works</a>
+    <a href="#get-started">Get started</a>
+    <a href="#templates">Templates</a>
+    <a href="#faq">FAQ</a>
+    <a href="https://github.com/gfreedman/gmail_reorg" target="_blank" rel="noopener">GitHub &nearr;</a>
+  </nav>
+</nav>
+
+<main id="main-content">
+
+  <!-- ===== Hero ===== -->
+  <section id="hero" aria-label="Introduction">
+    <div class="container">
+      <p class="eyebrow">Google Apps Script</p>
+      <h1>Your Gmail labels are chaos.<br>This fixes that.</h1>
+      <p class="hero-sub">For Gmail users with years of accumulated labels who want a clean structure and not a single email lost.</p>
+      <div class="btn-group">
+        <a href="https://github.com/gfreedman/gmail_reorg"
+           class="btn btn-primary"
+           target="_blank" rel="noopener">View the scripts on GitHub</a>
+        <a href="#how-it-works" class="btn btn-ghost">See how it works</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Trust / Safety ===== -->
+  <section id="trust" class="alt" aria-label="Safety">
+    <div class="container">
+      <p class="eyebrow">Your emails are safe</p>
+      <h2>Nothing moves until you say so</h2>
+      <p class="section-sub">Every run begins in dry-run mode. Your label structure is backed up before the first thread moves.</p>
+
+      <div class="scorecard">
+        <div class="score-row">
+          <span class="score-badge badge-safe">Read-only</span>
+          <span class="score-label">1. Backup</span>
+          <span class="score-desc">Writes a spreadsheet inventory. Emails are never touched.</span>
+        </div>
+        <div class="score-row">
+          <span class="score-badge badge-safe">Read-only</span>
+          <span class="score-label">2. Analyze</span>
+          <span class="score-desc">Reads your label structure. No changes are made.</span>
+        </div>
+        <div class="score-row">
+          <span class="score-badge badge-safe">Read-only</span>
+          <span class="score-label">3. Dry Run</span>
+          <span class="score-desc">Logs every planned move. Zero threads relocated.</span>
+        </div>
+        <div class="score-row">
+          <span class="score-badge badge-manual">You decide</span>
+          <span class="score-label">4. Execute</span>
+          <span class="score-desc">Only runs after you manually set <code>DRY_RUN: false</code>.</span>
+        </div>
+      </div>
+
+      <div class="callout">
+        <p><strong>Need to undo a migration?</strong> The script only adds and removes labels. Emails are never deleted. To reverse any migration, swap <code>from</code> and <code>to</code> in your plan and run again.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== How it works ===== -->
+  <section id="how-it-works" aria-label="How it works">
+    <div class="container">
+      <p class="eyebrow">The process</p>
+      <h2>Seven steps, none irreversible</h2>
+      <p class="section-sub">Each step builds on the last. Stop at any point. Nothing is permanent until you execute.</p>
+
+      <div class="pipeline">
+        <div class="phase">
+          <div class="phase-num">1</div>
+          <h3>Backup</h3>
+          <p>Export all labels and thread counts to a Google Spreadsheet.</p>
+          <span class="phase-status status-readonly">Read-only</span>
+        </div>
+        <div class="phase">
+          <div class="phase-num">2</div>
+          <h3>Analyze</h3>
+          <p>Auto-detect duplicates, empty labels, and suggest category groups.</p>
+          <span class="phase-status status-readonly">Read-only</span>
+        </div>
+        <div class="phase">
+          <div class="phase-num">3</div>
+          <h3>Plan</h3>
+          <p>Define your new label structure in a simple config object.</p>
+          <span class="phase-status status-manual">You edit</span>
+        </div>
+        <div class="phase">
+          <div class="phase-num">4</div>
+          <h3>Validate</h3>
+          <p>Catch broken rules, missing labels, and typos before anything runs.</p>
+          <span class="phase-status status-readonly">Read-only</span>
+        </div>
+        <div class="phase">
+          <div class="phase-num">5</div>
+          <h3>Dry Run</h3>
+          <p>Preview every label move in the log. Zero changes to your mailbox.</p>
+          <span class="phase-status status-readonly">Read-only</span>
+        </div>
+        <div class="phase">
+          <div class="phase-num">6</div>
+          <h3>Execute</h3>
+          <p>Migrate in batches with full auto-resume if the script times out.</p>
+          <span class="phase-status status-writes">Writes labels</span>
+        </div>
+        <div class="phase">
+          <div class="phase-num">7</div>
+          <h3>Track</h3>
+          <p>See what moved, what is pending, and resume any time.</p>
+          <span class="phase-status status-readonly">Read-only</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Get started ===== -->
+  <section id="get-started" aria-label="Get started">
+    <div class="container">
+      <p class="eyebrow">Quick start</p>
+      <h2>Up and running in five minutes</h2>
+      <p class="section-sub">No install. No CLI. Everything runs inside your Google account.</p>
+
+      <div class="steps">
+
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <h3>Open Google Apps Script</h3>
+            <p>Go to <a href="https://script.google.com" target="_blank" rel="noopener">script.google.com</a>, click <strong>New Project</strong>, and name it "Gmail Reorganization".</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <h3>Add the four script files</h3>
+            <p>Go to File &gt; New &gt; Script. Create four files in this exact order and paste the contents from GitHub into each.</p>
+            <div class="term">
+              <div class="term-bar">
+                <span class="term-dot"></span>
+                <span class="term-dot"></span>
+                <span class="term-dot"></span>
+                <span class="term-label">Apps Script: file order matters</span>
+              </div>
+              <div class="term-body">
+<span class="comment">// Load order is important. utils.gs must be first.</span><br>
+<span class="output">1.  </span><span class="cmd">utils.gs</span><span class="output">            &larr; load first</span><br>
+<span class="output">2.  </span><span class="cmd">backup.gs</span><br>
+<span class="output">3.  </span><span class="cmd">analysis.gs</span><br>
+<span class="output">4.  </span><span class="cmd">reorganization.gs</span>
+              </div>
+              <button class="copy-btn"
+                      data-copy="utils.gs
+backup.gs
+analysis.gs
+reorganization.gs"
+                      aria-label="Copy file list">Copy</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <h3>Authorize the script</h3>
+            <p>Run any function (try <code>quickStats</code>). Google will ask for permission to read your Gmail. Follow the prompts and click Allow.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <h3>Back up first, always</h3>
+            <p>Before changing anything, create an inventory of your current labels.</p>
+            <div class="term">
+              <div class="term-bar">
+                <span class="term-dot"></span>
+                <span class="term-dot"></span>
+                <span class="term-dot"></span>
+                <span class="term-label">Apps Script</span>
+              </div>
+              <div class="term-body">
+<span class="comment">// Creates a spreadsheet with all your labels and counts</span><br>
+<span class="cmd">createBackup();</span><br>
+<br>
+<span class="comment">// Or just see a quick overview first</span><br>
+<span class="cmd">quickStats();</span>
+              </div>
+              <button class="copy-btn"
+                      data-copy="createBackup();"
+                      aria-label="Copy createBackup command">Copy</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">5</div>
+          <div class="step-content">
+            <h3>Plan, validate, and run</h3>
+            <p>Edit <code>ORGANIZATION_PLAN</code> in <code>reorganization.gs</code> with your target structure, then follow this sequence.</p>
+            <div class="term">
+              <div class="term-bar">
+                <span class="term-dot"></span>
+                <span class="term-dot"></span>
+                <span class="term-dot"></span>
+                <span class="term-label">Apps Script</span>
+              </div>
+              <div class="term-body">
+<span class="comment">// Step 1: check your plan for errors</span><br>
+<span class="cmd">validatePlan();</span><br>
+<br>
+<span class="comment">// Step 2: preview everything (DRY_RUN: true)</span><br>
+<span class="cmd">main();</span><br>
+<br>
+<span class="comment">// Step 3: set DRY_RUN: false, then execute for real</span><br>
+<span class="cmd">main();</span><br>
+<br>
+<span class="comment">// Step 4: track progress</span><br>
+<span class="cmd">showProgress();</span>
+              </div>
+              <button class="copy-btn"
+                      data-copy="validatePlan();
+main();
+showProgress();"
+                      aria-label="Copy run sequence">Copy</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Templates ===== -->
+  <section id="templates" aria-label="Organization templates">
+    <div class="container">
+      <p class="eyebrow">Organization styles</p>
+      <h2>Pick a structure or build your own</h2>
+      <p class="section-sub">Four starting points. Edit freely in <code>reorganization.gs</code>. Five to ten top-level labels is the sweet spot.</p>
+
+      <div class="template-grid">
+        <div class="template-card">
+          <span class="tag">Minimal</span>
+          <h3>Five clean categories</h3>
+          <ul class="label-list">
+            <li>Personal</li>
+            <li>Work</li>
+            <li>Finance</li>
+            <li>Shopping</li>
+            <li>Archive</li>
+          </ul>
+        </div>
+        <div class="template-card">
+          <span class="tag">Standard</span>
+          <h3>Eight with sub-labels</h3>
+          <ul class="label-list">
+            <li>Personal</li>
+            <li class="sub">Personal/Family</li>
+            <li class="sub">Personal/Health</li>
+            <li>Work</li>
+            <li class="sub">Work/Projects</li>
+            <li>Finance</li>
+            <li class="sub">Finance/Taxes</li>
+            <li>Archive</li>
+          </ul>
+        </div>
+        <div class="template-card">
+          <span class="tag">GTD Style</span>
+          <h3>Action-based inbox</h3>
+          <ul class="label-list">
+            <li>Action/Today</li>
+            <li>Action/This Week</li>
+            <li>Action/Someday</li>
+            <li>Waiting For</li>
+            <li>Reference</li>
+            <li>Archive</li>
+          </ul>
+        </div>
+        <div class="template-card">
+          <span class="tag">Freelancer</span>
+          <h3>Business-ready</h3>
+          <ul class="label-list">
+            <li>Clients/Active</li>
+            <li>Clients/Past</li>
+            <li>Projects/Active</li>
+            <li>Admin/Invoices</li>
+            <li>Admin/Contracts</li>
+            <li>Admin/Taxes</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== FAQ ===== -->
+  <section id="faq" aria-label="Frequently asked questions">
+    <div class="container">
+      <p class="eyebrow">Common concerns</p>
+      <h2>Questions people ask at 2am</h2>
+      <p class="section-sub">If you are nervous, read these before you run.</p>
+
+      <div class="faq-list" role="list">
+
+        <details>
+          <summary>Will this delete any of my emails?
+            <span class="faq-icon" aria-hidden="true">+</span>
+          </summary>
+          <p class="faq-answer">No. The script only adds and removes labels on threads. Emails are never moved out of Gmail, never deleted, and never read. Your content stays exactly where it is, no matter what.</p>
+        </details>
+
+        <details>
+          <summary>What if the script crashes halfway through?
+            <span class="faq-icon" aria-hidden="true">+</span>
+          </summary>
+          <p class="faq-answer">Google Apps Script has a six-minute execution limit. The script handles this automatically: it saves progress before stopping and picks up exactly where it left off the next time you run <code>main()</code>. No emails are at risk during an interruption.</p>
+        </details>
+
+        <details>
+          <summary>I have tens of thousands of emails. Will this even work?
+            <span class="faq-icon" aria-hidden="true">+</span>
+          </summary>
+          <p class="faq-answer">Yes. The batch processing and auto-resume system was built for large mailboxes. If you hit Gmail rate limits, reduce <code>BATCH_SIZE</code> in the config and wait a few minutes. Run <code>main()</code> as many times as needed until <code>showProgress()</code> shows completion.</p>
+        </details>
+
+        <details>
+          <summary>What if I regret a migration after running it?
+            <span class="faq-icon" aria-hidden="true">+</span>
+          </summary>
+          <p class="faq-answer">Add a reverse migration: swap the <code>from</code> and <code>to</code> values in your plan and run again. Since no emails were deleted, everything can be restored to any state. You can go back and forth as many times as you want.</p>
+        </details>
+
+        <details>
+          <summary>Do I need to be a developer to use this?
+            <span class="faq-icon" aria-hidden="true">+</span>
+          </summary>
+          <p class="faq-answer">You need to copy files, paste code, and edit a config object. No programming experience is required beyond that. The trickiest part is deciding what your new label structure should look like, not writing the code to execute it.</p>
+        </details>
+
+        <details>
+          <summary>Does this send my email data anywhere?
+            <span class="faq-icon" aria-hidden="true">+</span>
+          </summary>
+          <p class="faq-answer">No. All code runs inside your Google account via Apps Script. Nothing is sent to any external server. The only thing written outside your Gmail is the optional backup spreadsheet, which also lives in your Google Drive.</p>
+        </details>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Limitations ===== -->
+  <section id="limitations" aria-label="Limitations">
+    <div class="container">
+      <p class="eyebrow">Know before you run</p>
+      <h2>What this tool does not do</h2>
+      <p class="section-sub">Honest scope. Knowing these upfront prevents surprises.</p>
+
+      <div class="limit-list">
+        <div class="limit-item">
+          <div class="limit-dot" aria-hidden="true"></div>
+          <p>System labels (Inbox, Sent, Drafts, Spam) cannot be renamed or reorganized. Gmail does not expose these to Apps Script.</p>
+        </div>
+        <div class="limit-item">
+          <div class="limit-dot" aria-hidden="true"></div>
+          <p>Label names cannot contain <code>&lt; &gt; &amp;</code> or similar special characters. Gmail enforces these restrictions independently of this script.</p>
+        </div>
+        <div class="limit-item">
+          <div class="limit-dot" aria-hidden="true"></div>
+          <p>Large mailboxes require multiple runs. The six-minute Apps Script execution limit is a Google platform constraint, but auto-resume makes it invisible in practice.</p>
+        </div>
+        <div class="limit-item">
+          <div class="limit-dot" aria-hidden="true"></div>
+          <p>Heavy use can trigger Gmail rate limits. Wait a few minutes and run again. This is not an error you need to fix in the code.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <p><strong>Gmail Reorg</strong> &mdash; Clean up years of label chaos</p>
+    <p><a href="https://github.com/gfreedman/gmail_reorg" target="_blank" rel="noopener">View on GitHub</a></p>
+    <p>Designed to run through Claude Code</p>
+  </div>
+</footer>
+
+<script>
+  // ===== Hamburger nav =====
+  const hamburger  = document.querySelector('.nav-hamburger');
+  const mobileNav  = document.getElementById('mobile-nav');
+  const hamIcon    = document.getElementById('hamburger-icon');
+
+  const BARS = '<rect y="3"  width="20" height="2" rx="1" fill="currentColor"/>'
+             + '<rect y="9"  width="20" height="2" rx="1" fill="currentColor"/>'
+             + '<rect y="15" width="20" height="2" rx="1" fill="currentColor"/>';
+  const CLOSE = '<line x1="4" y1="4"  x2="16" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+              + '<line x1="4" y1="16" x2="16" y2="4"  stroke="currentColor" stroke-width="2" stroke-linecap="round"/>';
+
+  function openMenu() {
+    mobileNav.hidden = false;
+    hamburger.setAttribute('aria-expanded', 'true');
+    hamburger.setAttribute('aria-label', 'Close navigation menu');
+    hamIcon.innerHTML = CLOSE;
+  }
+  function closeMenu() {
+    mobileNav.hidden = true;
+    hamburger.setAttribute('aria-expanded', 'false');
+    hamburger.setAttribute('aria-label', 'Open navigation menu');
+    hamIcon.innerHTML = BARS;
+  }
+
+  hamburger.addEventListener('click', () => {
+    mobileNav.hidden ? openMenu() : closeMenu();
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !mobileNav.hidden) {
+      closeMenu();
+      hamburger.focus();
+    }
+  });
+
+  mobileNav.querySelectorAll('a').forEach(link => {
+    link.addEventListener('click', closeMenu);
+  });
+
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 560 && !mobileNav.hidden) closeMenu();
+  });
+
+  // ===== Active nav via IntersectionObserver =====
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('.nav-links a');
+
+  if ('IntersectionObserver' in window) {
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          navLinks.forEach(link => {
+            link.classList.toggle('active', link.getAttribute('href') === '#' + entry.target.id);
+          });
+        }
+      });
+    }, { rootMargin: '-20% 0px -65% 0px' });
+    sections.forEach(s => observer.observe(s));
+  }
+
+  // ===== Copy buttons =====
+  document.querySelectorAll('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const text = btn.getAttribute('data-copy');
+      if (!navigator.clipboard) return;
+      navigator.clipboard.writeText(text).then(() => {
+        const original = btn.textContent;
+        btn.textContent = 'Copied!';
+        btn.style.opacity = '1';
+        setTimeout(() => {
+          btn.textContent = original;
+          btn.style.opacity = '';
+        }, 1500);
+      });
+    });
+  });
+</script>
+
+</body>
+</html>
