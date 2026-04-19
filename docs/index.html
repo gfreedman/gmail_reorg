@@ -425,7 +425,7 @@
     <div class="container">
       <p class="eyebrow">Google Apps Script</p>
       <h1>Your Gmail labels are chaos.<br>This fixes that.</h1>
-      <p class="hero-sub">For Gmail users with years of accumulated labels who want a clean structure and not a single email lost.</p>
+      <p class="hero-sub">For Gmail users who want a clean label structure without losing a single email.</p>
       <div class="btn-group">
         <a href="https://github.com/gfreedman/gmail_reorg"
            class="btn btn-primary"
@@ -444,9 +444,9 @@
 
       <div class="scorecard">
         <div class="score-row">
-          <span class="score-badge badge-safe">Read-only</span>
+          <span class="score-badge badge-safe">Email read-only</span>
           <span class="score-label">1. Backup</span>
-          <span class="score-desc">Writes a spreadsheet inventory. Emails are never touched.</span>
+          <span class="score-desc">Writes a spreadsheet to Drive. Never touches your emails.</span>
         </div>
         <div class="score-row">
           <span class="score-badge badge-safe">Read-only</span>
@@ -456,7 +456,7 @@
         <div class="score-row">
           <span class="score-badge badge-safe">Read-only</span>
           <span class="score-label">3. Dry Run</span>
-          <span class="score-desc">Logs every planned move. Zero threads relocated.</span>
+          <span class="score-desc">Logs every planned move. Zero threads relabeled.</span>
         </div>
         <div class="score-row">
           <span class="score-badge badge-manual">You decide</span>
@@ -488,7 +488,7 @@
         <div class="phase">
           <div class="phase-num">2</div>
           <h3>Analyze</h3>
-          <p>Auto-detect duplicates, empty labels, and suggest category groups.</p>
+          <p>Finds duplicates and empty labels, then suggests category groups.</p>
           <span class="phase-status status-readonly">Read-only</span>
         </div>
         <div class="phase">
@@ -618,16 +618,16 @@ reorganization.gs"
                 <span class="term-label">Apps Script</span>
               </div>
               <div class="term-body">
-<span class="comment">// Step 1: check your plan for errors</span><br>
+<span class="comment">// check your plan for errors</span><br>
 <span class="cmd">validatePlan();</span><br>
 <br>
-<span class="comment">// Step 2: preview everything (DRY_RUN: true)</span><br>
+<span class="comment">// preview everything — DRY_RUN: true in CONFIG</span><br>
 <span class="cmd">main();</span><br>
 <br>
-<span class="comment">// Step 3: set DRY_RUN: false, then execute for real</span><br>
+<span class="comment">// set DRY_RUN: false, then run for real</span><br>
 <span class="cmd">main();</span><br>
 <br>
-<span class="comment">// Step 4: track progress</span><br>
+<span class="comment">// check progress</span><br>
 <span class="cmd">showProgress();</span>
               </div>
               <button class="copy-btn"
@@ -648,7 +648,7 @@ showProgress();"
     <div class="container">
       <p class="eyebrow">Organization styles</p>
       <h2>Pick a structure or build your own</h2>
-      <p class="section-sub">Four starting points. Edit freely in <code>reorganization.gs</code>. Five to ten top-level labels is the sweet spot.</p>
+      <p class="section-sub">Four starting points. Edit freely in <code>reorganization.gs</code>. Five to ten top-level labels are the sweet spot.</p>
 
       <div class="template-grid">
         <div class="template-card">
@@ -709,7 +709,7 @@ showProgress();"
     <div class="container">
       <p class="eyebrow">Common concerns</p>
       <h2>Questions people ask at 2am</h2>
-      <p class="section-sub">If you are nervous, read these before you run.</p>
+      <p class="section-sub">If you're nervous, read these before you run.</p>
 
       <div class="faq-list" role="list">
 
@@ -717,7 +717,7 @@ showProgress();"
           <summary>Will this delete any of my emails?
             <span class="faq-icon" aria-hidden="true">+</span>
           </summary>
-          <p class="faq-answer">No. The script only adds and removes labels on threads. Emails are never moved out of Gmail, never deleted, and never read. Your content stays exactly where it is, no matter what.</p>
+          <p class="faq-answer">No. The script only adds and removes labels on threads. Emails are never deleted and never read. Your content stays exactly where it is.</p>
         </details>
 
         <details>
@@ -731,21 +731,21 @@ showProgress();"
           <summary>I have tens of thousands of emails. Will this even work?
             <span class="faq-icon" aria-hidden="true">+</span>
           </summary>
-          <p class="faq-answer">Yes. The batch processing and auto-resume system was built for large mailboxes. If you hit Gmail rate limits, reduce <code>BATCH_SIZE</code> in the config and wait a few minutes. Run <code>main()</code> as many times as needed until <code>showProgress()</code> shows completion.</p>
+          <p class="faq-answer">Yes. The batch processing and auto-resume system was built for large mailboxes. If you hit Gmail rate limits, reduce <code>BATCH_SIZE</code> in the config and wait a few minutes. Run <code>main()</code> as many times as needed until <code>showProgress()</code> shows all migrations as Done.</p>
         </details>
 
         <details>
           <summary>What if I regret a migration after running it?
             <span class="faq-icon" aria-hidden="true">+</span>
           </summary>
-          <p class="faq-answer">Add a reverse migration: swap the <code>from</code> and <code>to</code> values in your plan and run again. Since no emails were deleted, everything can be restored to any state. You can go back and forth as many times as you want.</p>
+          <p class="faq-answer">Add a reverse migration: swap the <code>from</code> and <code>to</code> values in your plan and run again. Since no emails were deleted, everything can be put back.</p>
         </details>
 
         <details>
           <summary>Do I need to be a developer to use this?
             <span class="faq-icon" aria-hidden="true">+</span>
           </summary>
-          <p class="faq-answer">You need to copy files, paste code, and edit a config object. No programming experience is required beyond that. The trickiest part is deciding what your new label structure should look like, not writing the code to execute it.</p>
+          <p class="faq-answer">You need to copy files, paste code, and edit a config object. Beyond that, no programming experience needed. The hard part is deciding what structure you want, not running the code.</p>
         </details>
 
         <details>
@@ -764,7 +764,7 @@ showProgress();"
     <div class="container">
       <p class="eyebrow">Know before you run</p>
       <h2>What this tool does not do</h2>
-      <p class="section-sub">Honest scope. Knowing these upfront prevents surprises.</p>
+      <p class="section-sub">Four things worth knowing before you start.</p>
 
       <div class="limit-list">
         <div class="limit-item">
@@ -773,11 +773,11 @@ showProgress();"
         </div>
         <div class="limit-item">
           <div class="limit-dot" aria-hidden="true"></div>
-          <p>Label names cannot contain <code>&lt; &gt; &amp;</code> or similar special characters. Gmail enforces these restrictions independently of this script.</p>
+          <p>Label names cannot contain <code>&lt; &gt; &amp;</code> or similar special characters. That's a Gmail restriction, not this script's.</p>
         </div>
         <div class="limit-item">
           <div class="limit-dot" aria-hidden="true"></div>
-          <p>Large mailboxes require multiple runs. The six-minute Apps Script execution limit is a Google platform constraint, but auto-resume makes it invisible in practice.</p>
+          <p>Large mailboxes require multiple runs. The six-minute Apps Script execution limit is a Google platform constraint, but auto-resume handles it.</p>
         </div>
         <div class="limit-item">
           <div class="limit-dot" aria-hidden="true"></div>
