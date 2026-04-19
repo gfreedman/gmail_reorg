@@ -13,7 +13,7 @@
  * Common patterns to detect label categories.
  * These are used to suggest organization structure based on label names.
  */
-var CATEGORY_PATTERNS =
+const CATEGORY_PATTERNS =
 {
   work:
   {
@@ -64,8 +64,8 @@ function analyzeLabelStructure()
 {
   log('=== GMAIL LABEL ANALYSIS ===');
 
-  var labels = GmailApp.getUserLabels();
-  var labelData = collectLabelData(labels);
+  const labels = GmailApp.getUserLabels();
+  const labelData = collectLabelData(labels);
 
   Logger.log('Total labels: ' + labels.length);
   Logger.log('');
@@ -94,27 +94,27 @@ function analyzeLabelStructure()
  */
 function collectLabelData(labels)
 {
-  var labelData = [];
+  const labelData = [];
 
   log('Collecting data for ' + labels.length + ' labels...');
 
-  for (var i = 0; i < labels.length; i++)
+  for (let i = 0; i < labels.length; i++)
   {
-    var label = labels[i];
-    var name = label.getName();
-    var threadCount = getThreadCountForLabel(label);
+    const label = labels[i];
+    const name = label.getName();
+    const threadCount = getThreadCountForLabel(label);
 
     // Calculate nesting level by counting slashes
-    var level = (name.match(/\//g) || []).length;
+    const level = (name.match(/\//g) || []).length;
 
     // Extract parent label (everything before last slash)
-    var parent = name.indexOf('/') > -1 ? name.substring(0, name.lastIndexOf('/')) : null;
+    const parent = name.indexOf('/') > -1 ? name.substring(0, name.lastIndexOf('/')) : null;
 
     // Get the base name (last segment after slash)
-    var baseName = name.split('/').pop().toLowerCase();
+    const baseName = name.split('/').pop().toLowerCase();
 
     // Detect category based on keywords
-    var category = detectCategory(baseName);
+    const category = detectCategory(baseName);
 
     labelData.push({
       name: name,
@@ -137,12 +137,12 @@ function collectLabelData(labels)
  */
 function detectCategory(labelName)
 {
-  for (var category in CATEGORY_PATTERNS)
+  for (const category of Object.keys(CATEGORY_PATTERNS))
   {
-    var patterns = CATEGORY_PATTERNS[category];
+    const patterns = CATEGORY_PATTERNS[category];
 
     // Check keywords
-    for (var i = 0; i < patterns.keywords.length; i++)
+    for (let i = 0; i < patterns.keywords.length; i++)
     {
       if (labelName.indexOf(patterns.keywords[i]) > -1)
       {
@@ -151,7 +151,7 @@ function detectCategory(labelName)
     }
 
     // Check domains
-    for (var i = 0; i < patterns.domains.length; i++)
+    for (let i = 0; i < patterns.domains.length; i++)
     {
       if (labelName.indexOf(patterns.domains[i]) > -1)
       {
@@ -176,16 +176,16 @@ function detectCategory(labelName)
 function displayTopLabels(labelData)
 {
   // Sort by thread count descending
-  var sorted = labelData.slice().sort(function(a, b)
+  const sorted = labelData.slice().sort(function(a, b)
   {
     return b.threadCount - a.threadCount;
   });
 
   Logger.log('=== TOP 20 LABELS BY THREAD COUNT ===');
-  for (var i = 0; i < Math.min(20, sorted.length); i++)
+  for (let i = 0; i < Math.min(20, sorted.length); i++)
   {
-    var label = sorted[i];
-    var categoryTag = label.suggestedCategory ? ' [' + label.suggestedCategory + ']' : '';
+    const label = sorted[i];
+    const categoryTag = label.suggestedCategory ? ' [' + label.suggestedCategory + ']' : '';
     Logger.log('  ' + label.threadCount + ' threads: ' + label.name + categoryTag);
   }
   Logger.log('');
@@ -199,15 +199,15 @@ function displayTopLabels(labelData)
  */
 function displayLabelHierarchy(labelData)
 {
-  var rootLabels = labelData.filter(function(l)
+  const rootLabels = labelData.filter(function(l)
   {
     return l.level === 0;
   });
-  var nestedLabels = labelData.filter(function(l)
+  const nestedLabels = labelData.filter(function(l)
   {
     return l.level > 0;
   });
-  var deepLabels = labelData.filter(function(l)
+  const deepLabels = labelData.filter(function(l)
   {
     return l.level >= 2;
   });
@@ -230,7 +230,7 @@ function displayLabelHierarchy(labelData)
   if (deepLabels.length > 0)
   {
     Logger.log('=== DEEPLY NESTED LABELS ===');
-    for (var i = 0; i < deepLabels.length; i++)
+    for (let i = 0; i < deepLabels.length; i++)
     {
       Logger.log('  ' + deepLabels[i].name + ' (' + deepLabels[i].threadCount + ' threads)');
     }
@@ -245,7 +245,7 @@ function displayLabelHierarchy(labelData)
  */
 function displayEmptyLabels(labelData)
 {
-  var emptyLabels = labelData.filter(function(l)
+  const emptyLabels = labelData.filter(function(l)
   {
     return l.threadCount === 0;
   });
@@ -254,7 +254,7 @@ function displayEmptyLabels(labelData)
   {
     Logger.log('=== EMPTY LABELS (' + emptyLabels.length + ') ===');
     Logger.log('These labels have no emails and could be deleted:');
-    for (var i = 0; i < emptyLabels.length; i++)
+    for (let i = 0; i < emptyLabels.length; i++)
     {
       Logger.log('  ' + emptyLabels[i].name);
     }
@@ -272,13 +272,13 @@ function displayEmptyLabels(labelData)
  */
 function displayPotentialDuplicates(labelData)
 {
-  var duplicates = [];
-  var seen = {};
+  const duplicates = [];
+  const seen = {};
 
   // Normalize names by removing non-alphanumeric chars
-  for (var i = 0; i < labelData.length; i++)
+  for (let i = 0; i < labelData.length; i++)
   {
-    var normalized = labelData[i].baseName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const normalized = labelData[i].baseName.toLowerCase().replace(/[^a-z0-9]/g, '');
     if (seen[normalized])
     {
       duplicates.push({
@@ -296,7 +296,7 @@ function displayPotentialDuplicates(labelData)
   {
     Logger.log('=== POTENTIAL DUPLICATES ===');
     Logger.log('These labels have similar names and might be consolidated:');
-    for (var i = 0; i < duplicates.length; i++)
+    for (let i = 0; i < duplicates.length; i++)
     {
       Logger.log('  "' + duplicates[i].label1 + '" and "' + duplicates[i].label2 + '"');
     }
@@ -315,10 +315,10 @@ function suggestConsolidations(labelData)
   Logger.log('=== CONSOLIDATION SUGGESTIONS ===');
 
   // Group labels by parent
-  var parentGroups = {};
-  for (var i = 0; i < labelData.length; i++)
+  const parentGroups = {};
+  for (let i = 0; i < labelData.length; i++)
   {
-    var label = labelData[i];
+    const label = labelData[i];
     if (label.parent)
     {
       if (!parentGroups[label.parent])
@@ -330,8 +330,8 @@ function suggestConsolidations(labelData)
   }
 
   // Find parents with only one child (could be flattened)
-  var singleChildParents = [];
-  for (var parent in parentGroups)
+  const singleChildParents = [];
+  for (const parent of Object.keys(parentGroups))
   {
     if (parentGroups[parent].length === 1)
     {
@@ -345,7 +345,7 @@ function suggestConsolidations(labelData)
   if (singleChildParents.length > 0)
   {
     Logger.log('Labels with only one child (could be flattened):');
-    for (var i = 0; i < singleChildParents.length; i++)
+    for (let i = 0; i < singleChildParents.length; i++)
     {
       Logger.log('  "' + singleChildParents[i].parent + '" -> "' + singleChildParents[i].child + '"');
     }
@@ -353,7 +353,7 @@ function suggestConsolidations(labelData)
   }
 
   // Find labels with very few threads
-  var lowUsage = labelData.filter(function(l)
+  const lowUsage = labelData.filter(function(l)
   {
     return l.threadCount > 0 && l.threadCount < 5;
   });
@@ -361,7 +361,7 @@ function suggestConsolidations(labelData)
   if (lowUsage.length > 0)
   {
     Logger.log('Labels with very few threads (1-4):');
-    for (var i = 0; i < Math.min(10, lowUsage.length); i++)
+    for (let i = 0; i < Math.min(10, lowUsage.length); i++)
     {
       Logger.log('  "' + lowUsage[i].name + '" (' + lowUsage[i].threadCount + ' threads)');
     }
@@ -382,11 +382,11 @@ function suggestConsolidations(labelData)
 function displayCategoryAnalysis(labelData)
 {
   // Group labels by detected category
-  var categories = {};
+  const categories = {};
 
-  for (var i = 0; i < labelData.length; i++)
+  for (let i = 0; i < labelData.length; i++)
   {
-    var cat = labelData[i].suggestedCategory || 'uncategorized';
+    const cat = labelData[i].suggestedCategory || 'uncategorized';
     if (!categories[cat])
     {
       categories[cat] = {count: 0, threads: 0, labels: []};
@@ -397,12 +397,12 @@ function displayCategoryAnalysis(labelData)
   }
 
   Logger.log('=== DETECTED CATEGORIES ===');
-  for (var cat in categories)
+  for (const cat of Object.keys(categories))
   {
     if (cat !== 'uncategorized')
     {
       Logger.log(cat.toUpperCase() + ': ' + categories[cat].count + ' labels, ' + categories[cat].threads + ' threads');
-      for (var i = 0; i < Math.min(5, categories[cat].labels.length); i++)
+      for (let i = 0; i < Math.min(5, categories[cat].labels.length); i++)
       {
         Logger.log('    - ' + categories[cat].labels[i]);
       }
@@ -501,8 +501,8 @@ function proposeOrganization(labelData)
  */
 function visualizeLabelHierarchy()
 {
-  var labels = GmailApp.getUserLabels();
-  var labelNames = labels.map(function(l)
+  const labels = GmailApp.getUserLabels();
+  const labelNames = labels.map(function(l)
   {
     return l.getName();
   }).sort();
@@ -510,23 +510,23 @@ function visualizeLabelHierarchy()
   Logger.log('=== LABEL HIERARCHY TREE ===');
   Logger.log('');
 
-  for (var i = 0; i < labelNames.length; i++)
+  for (let i = 0; i < labelNames.length; i++)
   {
-    var name = labelNames[i];
-    var level = (name.match(/\//g) || []).length;
+    const name = labelNames[i];
+    const level = (name.match(/\//g) || []).length;
 
     // Build indentation
-    var indent = '';
-    for (var j = 0; j < level; j++)
+    let indent = '';
+    for (let j = 0; j < level; j++)
     {
       indent += '    ';
     }
 
     // Get just the label name (after last slash)
-    var displayName = name.split('/').pop();
+    const displayName = name.split('/').pop();
 
     // Add tree characters for visual hierarchy
-    var prefix = level > 0 ? '├── ' : '';
+    const prefix = level > 0 ? '├── ' : '';
     Logger.log(indent + prefix + displayName);
   }
 }
@@ -537,7 +537,7 @@ function visualizeLabelHierarchy()
  */
 function generateMigrationTemplate()
 {
-  var labelData = collectLabelData(GmailApp.getUserLabels());
+  const labelData = collectLabelData(GmailApp.getUserLabels());
 
   Logger.log('=== MIGRATION PLAN TEMPLATE ===');
   Logger.log('');
@@ -557,12 +557,12 @@ function generateMigrationTemplate()
   Logger.log('  migrations: [');
 
   // Generate migration suggestions based on detected categories
-  for (var i = 0; i < labelData.length; i++)
+  for (let i = 0; i < labelData.length; i++)
   {
-    var label = labelData[i];
+    const label = labelData[i];
     if (label.suggestedCategory && label.threadCount > 0)
     {
-      var suggestedDest = label.suggestedCategory.charAt(0).toUpperCase() + label.suggestedCategory.slice(1);
+      const suggestedDest = label.suggestedCategory.charAt(0).toUpperCase() + label.suggestedCategory.slice(1);
       Logger.log('    // ' + label.threadCount + ' threads');
       Logger.log('    {from: "' + label.name + '", to: "' + suggestedDest + '"},');
     }
@@ -584,16 +584,16 @@ function generateMigrationTemplate()
  */
 function quickStats()
 {
-  var labels = GmailApp.getUserLabels();
+  const labels = GmailApp.getUserLabels();
 
-  var totalThreads = 0;
-  var emptyCount = 0;
-  var maxThreads = 0;
-  var maxLabel = '';
+  let totalThreads = 0;
+  let emptyCount = 0;
+  let maxThreads = 0;
+  let maxLabel = '';
 
-  for (var i = 0; i < labels.length; i++)
+  for (let i = 0; i < labels.length; i++)
   {
-    var count = getThreadCountForLabel(labels[i]);
+    const count = getThreadCountForLabel(labels[i]);
     totalThreads += count;
 
     if (count === 0)
@@ -615,7 +615,7 @@ function quickStats()
   Logger.log('Largest label: "' + maxLabel + '" (' + maxThreads + ' threads)');
 
   // Show completed migrations if any
-  var completed = getCompletedMigrations();
+  const completed = getCompletedMigrations();
   if (completed.length > 0)
   {
     Logger.log('');

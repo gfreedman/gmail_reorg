@@ -191,6 +191,7 @@ showProgress();
 | Function | Description |
 |----------|-------------|
 | `showStatistics()` | Overall statistics |
+| `listAllLabelsDetailed()` | List all labels with thread counts |
 | `deleteEmptyLabels(dryRun)` | Remove empty labels |
 | `findDuplicateLabels()` | Find similar labels |
 | `exportLabelStructure()` | Export as JSON |

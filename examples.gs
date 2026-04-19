@@ -21,19 +21,18 @@ function example_healthCheck()
   Logger.log('=== GMAIL HEALTH CHECK ===');
   Logger.log('');
 
-  // Get basic stats
-  var labels = GmailApp.getUserLabels();
-  var totalLabels = labels.length;
+  const labels = GmailApp.getUserLabels();
+  const totalLabels = labels.length;
 
-  var emptyCount = 0;
-  var totalThreads = 0;
-  var largestLabel = '';
-  var largestCount = 0;
+  let emptyCount = 0;
+  let totalThreads = 0;
+  let largestLabel = '';
+  let largestCount = 0;
 
   // Scan all labels
-  for (var i = 0; i < labels.length; i++)
+  for (let i = 0; i < labels.length; i++)
   {
-    var count = getThreadCountForLabel(labels[i]);
+    const count = getThreadCountForLabel(labels[i]);
     totalThreads += count;
 
     if (count === 0)
@@ -85,18 +84,18 @@ function example_healthCheck()
  */
 function example_findLargeLabels()
 {
-  var THRESHOLD = 100;  // Labels with more than this many threads
+  const THRESHOLD = 100;  // Labels with more than this many threads
 
   Logger.log('=== LARGE LABELS (>' + THRESHOLD + ' threads) ===');
   Logger.log('');
 
-  var labels = GmailApp.getUserLabels();
-  var largeLabels = [];
+  const labels = GmailApp.getUserLabels();
+  const largeLabels = [];
 
   // Find labels exceeding threshold
-  for (var i = 0; i < labels.length; i++)
+  for (let i = 0; i < labels.length; i++)
   {
-    var count = getThreadCountForLabel(labels[i]);
+    const count = getThreadCountForLabel(labels[i]);
     if (count > THRESHOLD)
     {
       largeLabels.push({
@@ -118,7 +117,7 @@ function example_findLargeLabels()
   }
   else
   {
-    for (var i = 0; i < largeLabels.length; i++)
+    for (let i = 0; i < largeLabels.length; i++)
     {
       Logger.log(largeLabels[i].count + ' threads: ' + largeLabels[i].name);
     }
@@ -135,16 +134,16 @@ function example_listRootLabels()
   Logger.log('=== ROOT-LEVEL LABELS ===');
   Logger.log('');
 
-  var labels = GmailApp.getUserLabels();
-  var rootLabels = [];
+  const labels = GmailApp.getUserLabels();
+  const rootLabels = [];
 
   // Find labels without slashes (root level)
-  for (var i = 0; i < labels.length; i++)
+  for (let i = 0; i < labels.length; i++)
   {
-    var name = labels[i].getName();
+    const name = labels[i].getName();
     if (name.indexOf('/') === -1)
     {
-      var count = getThreadCountForLabel(labels[i]);
+      const count = getThreadCountForLabel(labels[i]);
       rootLabels.push({
         name: name,
         count: count
@@ -158,7 +157,7 @@ function example_listRootLabels()
     return a.name.localeCompare(b.name);
   });
 
-  for (var i = 0; i < rootLabels.length; i++)
+  for (let i = 0; i < rootLabels.length; i++)
   {
     Logger.log(rootLabels[i].name + ' (' + rootLabels[i].count + ' threads)');
   }
@@ -180,7 +179,7 @@ function example_listRootLabels()
 function example_minimalPlan()
 {
   // Define a minimal organization plan
-  var minimalPlan =
+  const minimalPlan =
   {
     newLabels:
     [
@@ -202,7 +201,7 @@ function example_minimalPlan()
   Logger.log('');
   Logger.log('This plan creates 5 simple categories:');
 
-  for (var i = 0; i < minimalPlan.newLabels.length; i++)
+  for (let i = 0; i < minimalPlan.newLabels.length; i++)
   {
     Logger.log('  - ' + minimalPlan.newLabels[i]);
   }
@@ -221,11 +220,11 @@ function example_minimalPlan()
  */
 function example_yearBasedArchive()
 {
-  var currentYear = new Date().getFullYear();
-  var years = [];
+  const currentYear = new Date().getFullYear();
+  const years = [];
 
   // Generate labels for last 5 years
-  for (var i = 0; i < 5; i++)
+  for (let i = 0; i < 5; i++)
   {
     years.push('Archive/' + (currentYear - i));
   }
@@ -235,7 +234,7 @@ function example_yearBasedArchive()
   Logger.log('');
   Logger.log('Suggested archive labels:');
 
-  for (var i = 0; i < years.length; i++)
+  for (let i = 0; i < years.length; i++)
   {
     Logger.log('  - ' + years[i]);
   }
@@ -268,25 +267,25 @@ function example_findOrphanedLabels()
   Logger.log('=== ORPHANED LABELS CHECK ===');
   Logger.log('');
 
-  var labels = GmailApp.getUserLabels();
-  var labelNames = {};
+  const labels = GmailApp.getUserLabels();
+  const labelNames = {};
 
   // Build set of all label names
-  for (var i = 0; i < labels.length; i++)
+  for (let i = 0; i < labels.length; i++)
   {
     labelNames[labels[i].getName()] = true;
   }
 
   // Find orphans (nested labels with missing parents)
-  var orphans = [];
-  for (var i = 0; i < labels.length; i++)
+  const orphans = [];
+  for (let i = 0; i < labels.length; i++)
   {
-    var name = labels[i].getName();
-    var lastSlash = name.lastIndexOf('/');
+    const name = labels[i].getName();
+    const lastSlash = name.lastIndexOf('/');
 
     if (lastSlash > 0)
     {
-      var parent = name.substring(0, lastSlash);
+      const parent = name.substring(0, lastSlash);
       if (!labelNames[parent])
       {
         orphans.push({
@@ -304,7 +303,7 @@ function example_findOrphanedLabels()
   else
   {
     Logger.log('Found ' + orphans.length + ' orphaned labels:');
-    for (var i = 0; i < orphans.length; i++)
+    for (let i = 0; i < orphans.length; i++)
     {
       Logger.log('  "' + orphans[i].label + '" (parent "' + orphans[i].missingParent + '" missing)');
     }
@@ -322,24 +321,24 @@ function example_findOrphanedLabels()
  */
 function example_generatePatternMigrations()
 {
-  var PATTERN = 'Old';       // Labels containing this string
-  var DESTINATION = 'Archive';  // Where to migrate them
+  const PATTERN = 'Old';         // Labels containing this string
+  const DESTINATION = 'Archive'; // Where to migrate them
 
   Logger.log('=== PATTERN-BASED MIGRATION GENERATOR ===');
   Logger.log('');
   Logger.log('Finding labels containing: "' + PATTERN + '"');
   Logger.log('');
 
-  var labels = GmailApp.getUserLabels();
-  var matches = [];
+  const labels = GmailApp.getUserLabels();
+  const matches = [];
 
   // Find matching labels
-  for (var i = 0; i < labels.length; i++)
+  for (let i = 0; i < labels.length; i++)
   {
-    var name = labels[i].getName();
+    const name = labels[i].getName();
     if (name.toLowerCase().indexOf(PATTERN.toLowerCase()) > -1)
     {
-      var count = getThreadCountForLabel(labels[i]);
+      const count = getThreadCountForLabel(labels[i]);
       matches.push({
         name: name,
         count: count
@@ -355,7 +354,7 @@ function example_generatePatternMigrations()
   {
     Logger.log('Add these to your migrations array:');
     Logger.log('');
-    for (var i = 0; i < matches.length; i++)
+    for (let i = 0; i < matches.length; i++)
     {
       Logger.log("  {from: '" + matches[i].name + "', to: '" + DESTINATION + "'}, // " + matches[i].count + ' threads');
     }
@@ -365,42 +364,34 @@ function example_generatePatternMigrations()
 /**
  * EXAMPLE 9: Count Threads by Category Pattern
  * See how many threads would go to each category.
- * Helps plan your reorganization structure.
+ * Uses CATEGORY_PATTERNS from analysis.gs for consistency.
  */
 function example_categoryDistribution()
 {
-  var categories =
-  {
-    'personal': ['family', 'friend', 'personal', 'home'],
-    'work': ['work', 'job', 'office', 'client', 'project'],
-    'finance': ['bank', 'payment', 'receipt', 'tax', 'invoice'],
-    'shopping': ['order', 'shipping', 'amazon', 'ebay', 'store']
-  };
-
   Logger.log('=== ESTIMATED CATEGORY DISTRIBUTION ===');
   Logger.log('');
 
-  var labels = GmailApp.getUserLabels();
-  var results = {};
+  const labels = GmailApp.getUserLabels();
+  const results = {};
 
-  // Initialize results
-  for (var cat in categories)
+  // Initialize results from authoritative CATEGORY_PATTERNS
+  for (const cat of Object.keys(CATEGORY_PATTERNS))
   {
     results[cat] = {labels: 0, threads: 0};
   }
   results['other'] = {labels: 0, threads: 0};
 
   // Categorize each label
-  for (var i = 0; i < labels.length; i++)
+  for (let i = 0; i < labels.length; i++)
   {
-    var name = labels[i].getName().toLowerCase();
-    var count = getThreadCountForLabel(labels[i]);
-    var matched = false;
+    const name = labels[i].getName().toLowerCase();
+    const count = getThreadCountForLabel(labels[i]);
+    let matched = false;
 
-    for (var cat in categories)
+    for (const cat of Object.keys(CATEGORY_PATTERNS))
     {
-      var keywords = categories[cat];
-      for (var j = 0; j < keywords.length; j++)
+      const keywords = CATEGORY_PATTERNS[cat].keywords;
+      for (let j = 0; j < keywords.length; j++)
       {
         if (name.indexOf(keywords[j]) > -1)
         {
@@ -424,7 +415,7 @@ function example_categoryDistribution()
   }
 
   // Display results
-  for (var cat in results)
+  for (const cat of Object.keys(results))
   {
     Logger.log(cat.toUpperCase() + ': ' + results[cat].labels + ' labels, ~' + results[cat].threads + ' threads');
   }
@@ -437,8 +428,8 @@ function example_categoryDistribution()
  */
 function example_testSingleMigration()
 {
-  var FROM_LABEL = 'TestLabel';    // Change this
-  var TO_LABEL = 'Archive/Test';   // Change this
+  const FROM_LABEL = 'TestLabel';   // Change this
+  const TO_LABEL = 'Archive/Test';  // Change this
 
   Logger.log('=== SINGLE MIGRATION TEST ===');
   Logger.log('');
@@ -446,7 +437,7 @@ function example_testSingleMigration()
   Logger.log('To: "' + TO_LABEL + '"');
   Logger.log('');
 
-  var fromLabel = GmailApp.getUserLabelByName(FROM_LABEL);
+  const fromLabel = GmailApp.getUserLabelByName(FROM_LABEL);
 
   if (!fromLabel)
   {
@@ -455,14 +446,14 @@ function example_testSingleMigration()
     return;
   }
 
-  var threads = getAllThreadsFromLabel(fromLabel);
+  const threads = getAllThreadsFromLabel(fromLabel);
   Logger.log('Threads to migrate: ' + threads.length);
 
   if (threads.length > 0)
   {
     Logger.log('');
     Logger.log('Sample threads:');
-    for (var i = 0; i < Math.min(5, threads.length); i++)
+    for (let i = 0; i < Math.min(5, threads.length); i++)
     {
       Logger.log('  - ' + threads[i].getFirstMessageSubject());
     }

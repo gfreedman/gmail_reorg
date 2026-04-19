@@ -14,7 +14,7 @@
  * Script property keys for state persistence
  * Used to store migration progress between script runs
  */
-var PROPERTY_KEYS =
+const PROPERTY_KEYS =
 {
   MIGRATION_STATE: 'gmail_reorg_migration_state',
   LAST_RUN: 'gmail_reorg_last_run',
@@ -26,7 +26,7 @@ var PROPERTY_KEYS =
  * Gmail reserved label names that cannot be used
  * These are system labels that Gmail protects
  */
-var RESERVED_LABELS =
+const RESERVED_LABELS =
 [
   'inbox', 'sent', 'drafts', 'spam', 'trash', 'starred', 'important',
   'chats', 'all', 'unread', 'snoozed', 'scheduled', 'category'
@@ -36,12 +36,12 @@ var RESERVED_LABELS =
  * Characters not allowed in Gmail label names
  * Gmail will reject labels containing these
  */
-var INVALID_LABEL_CHARS = ['&', '<', '>', '[', ']', '{', '}'];
+const INVALID_LABEL_CHARS = ['&', '<', '>', '[', ']', '{', '}'];
 
 /**
  * Numeric constants - avoid magic numbers throughout codebase
  */
-var CONSTANTS =
+const CONSTANTS =
 {
   THREAD_BATCH_SIZE: 500,           // Max threads per API call
   DEFAULT_TIME_BUFFER_MS: 30000,    // 30 second safety buffer
@@ -71,7 +71,7 @@ function getAllThreadsFromLabel(labelOrName)
     return [];
   }
 
-  var label;
+  let label;
 
   // Accept either a label object or a string name
   if (typeof labelOrName === 'string')
@@ -98,13 +98,13 @@ function getAllThreadsFromLabel(labelOrName)
   }
 
   // Paginate through all threads (Gmail returns max 500 per call)
-  var allThreads = [];
-  var start = 0;
-  var batchSize = CONSTANTS.THREAD_BATCH_SIZE;
+  const allThreads = [];
+  let start = 0;
+  const batchSize = CONSTANTS.THREAD_BATCH_SIZE;
 
   while (true)
   {
-    var threads;
+    let threads;
     try
     {
       threads = label.getThreads(start, batchSize);
@@ -120,7 +120,7 @@ function getAllThreadsFromLabel(labelOrName)
     {
       break;
     }
-    allThreads = allThreads.concat(threads);
+    allThreads.push(...threads);
     if (threads.length < batchSize)
     {
       break;
@@ -146,7 +146,7 @@ function getThreadCountForLabel(labelOrName)
     return 0;
   }
 
-  var label;
+  let label;
 
   // Accept either label object or string name
   if (typeof labelOrName === 'string')
@@ -173,7 +173,7 @@ function getThreadCountForLabel(labelOrName)
   try
   {
     // Optimization: if first batch is smaller than max, that's the total
-    var threads = label.getThreads(0, CONSTANTS.THREAD_BATCH_SIZE);
+    const threads = label.getThreads(0, CONSTANTS.THREAD_BATCH_SIZE);
     if (!threads)
     {
       return 0;
@@ -244,7 +244,7 @@ function formatTimestamp()
  */
 function saveMigrationState(state)
 {
-  var props = PropertiesService.getScriptProperties();
+  const props = PropertiesService.getScriptProperties();
   props.setProperty(PROPERTY_KEYS.MIGRATION_STATE, JSON.stringify(state));
   props.setProperty(PROPERTY_KEYS.LAST_RUN, new Date().toISOString());
 }
@@ -256,8 +256,8 @@ function saveMigrationState(state)
  */
 function loadMigrationState()
 {
-  var props = PropertiesService.getScriptProperties();
-  var stateJson = props.getProperty(PROPERTY_KEYS.MIGRATION_STATE);
+  const props = PropertiesService.getScriptProperties();
+  const stateJson = props.getProperty(PROPERTY_KEYS.MIGRATION_STATE);
 
   if (!stateJson)
   {
@@ -280,7 +280,7 @@ function loadMigrationState()
  */
 function clearMigrationState()
 {
-  var props = PropertiesService.getScriptProperties();
+  const props = PropertiesService.getScriptProperties();
   props.deleteProperty(PROPERTY_KEYS.MIGRATION_STATE);
   log('Migration state cleared');
 }
@@ -303,19 +303,19 @@ function markMigrationCompleted(fromLabel, toLabel, threadCount)
     return false;
   }
 
-  var props = PropertiesService.getScriptProperties();
-  var maxRetries = 3;
+  const props = PropertiesService.getScriptProperties();
+  const maxRetries = 3;
 
   // Retry loop for concurrent modification handling
-  for (var attempt = 0; attempt < maxRetries; attempt++)
+  for (let attempt = 0; attempt < maxRetries; attempt++)
   {
     try
     {
-      var completedJson = props.getProperty(PROPERTY_KEYS.COMPLETED_MIGRATIONS) || '[]';
-      var completed = JSON.parse(completedJson);
+      const completedJson = props.getProperty(PROPERTY_KEYS.COMPLETED_MIGRATIONS) || '[]';
+      const completed = JSON.parse(completedJson);
 
       // Check if already exists to prevent duplicates
-      var exists = completed.some(function(m)
+      const exists = completed.some(function(m)
       {
         return m.from === fromLabel && m.to === toLabel;
       });
@@ -355,12 +355,12 @@ function markMigrationCompleted(fromLabel, toLabel, threadCount)
  */
 function isMigrationCompleted(fromLabel)
 {
-  var props = PropertiesService.getScriptProperties();
-  var completedJson = props.getProperty(PROPERTY_KEYS.COMPLETED_MIGRATIONS) || '[]';
+  const props = PropertiesService.getScriptProperties();
+  const completedJson = props.getProperty(PROPERTY_KEYS.COMPLETED_MIGRATIONS) || '[]';
 
   try
   {
-    var completed = JSON.parse(completedJson);
+    const completed = JSON.parse(completedJson);
     return completed.some(function(m)
     {
       return m.from === fromLabel;
@@ -379,8 +379,8 @@ function isMigrationCompleted(fromLabel)
  */
 function getCompletedMigrations()
 {
-  var props = PropertiesService.getScriptProperties();
-  var completedJson = props.getProperty(PROPERTY_KEYS.COMPLETED_MIGRATIONS) || '[]';
+  const props = PropertiesService.getScriptProperties();
+  const completedJson = props.getProperty(PROPERTY_KEYS.COMPLETED_MIGRATIONS) || '[]';
 
   try
   {
@@ -398,7 +398,7 @@ function getCompletedMigrations()
  */
 function resetAllMigrationTracking()
 {
-  var props = PropertiesService.getScriptProperties();
+  const props = PropertiesService.getScriptProperties();
   props.deleteProperty(PROPERTY_KEYS.MIGRATION_STATE);
   props.deleteProperty(PROPERTY_KEYS.COMPLETED_MIGRATIONS);
   props.deleteProperty(PROPERTY_KEYS.STATISTICS);
@@ -417,12 +417,12 @@ function resetAllMigrationTracking()
  */
 function updateStatistics(threadsProcessed, labelsCreated)
 {
-  var props = PropertiesService.getScriptProperties();
-  var statsJson = props.getProperty(PROPERTY_KEYS.STATISTICS) || '{}';
+  const props = PropertiesService.getScriptProperties();
+  const statsJson = props.getProperty(PROPERTY_KEYS.STATISTICS) || '{}';
 
   try
   {
-    var stats = JSON.parse(statsJson);
+    const stats = JSON.parse(statsJson);
     stats.totalThreadsProcessed = (stats.totalThreadsProcessed || 0) + threadsProcessed;
     stats.totalLabelsCreated = (stats.totalLabelsCreated || 0) + labelsCreated;
     stats.lastUpdated = new Date().toISOString();
@@ -442,8 +442,8 @@ function updateStatistics(threadsProcessed, labelsCreated)
  */
 function getStatistics()
 {
-  var props = PropertiesService.getScriptProperties();
-  var statsJson = props.getProperty(PROPERTY_KEYS.STATISTICS) || '{}';
+  const props = PropertiesService.getScriptProperties();
+  const statsJson = props.getProperty(PROPERTY_KEYS.STATISTICS) || '{}';
 
   try
   {
@@ -460,8 +460,8 @@ function getStatistics()
  */
 function showStatistics()
 {
-  var stats = getStatistics();
-  var completed = getCompletedMigrations();
+  const stats = getStatistics();
+  const completed = getCompletedMigrations();
 
   Logger.log('=== MIGRATION STATISTICS ===');
   Logger.log('Total script runs: ' + (stats.runCount || 0));
@@ -474,9 +474,9 @@ function showStatistics()
   if (completed.length > 0)
   {
     Logger.log('=== COMPLETED MIGRATIONS ===');
-    for (var i = 0; i < completed.length; i++)
+    for (let i = 0; i < completed.length; i++)
     {
-      var m = completed[i];
+      const m = completed[i];
       Logger.log('  "' + m.from + '" -> "' + m.to + '" (' + m.threads + ' threads)');
     }
   }
@@ -502,7 +502,7 @@ function validateLabelName(labelName)
   }
 
   // Convert to string if needed
-  var nameStr = String(labelName);
+  const nameStr = String(labelName);
 
   // Check for empty string
   if (nameStr.trim().length === 0)
@@ -510,10 +510,10 @@ function validateLabelName(labelName)
     return {valid: false, reason: 'Label name cannot be empty'};
   }
 
-  var normalized = nameStr.toLowerCase().trim();
+  const normalized = nameStr.toLowerCase().trim();
 
   // Check for reserved words (case-insensitive)
-  for (var i = 0; i < RESERVED_LABELS.length; i++)
+  for (let i = 0; i < RESERVED_LABELS.length; i++)
   {
     if (normalized === RESERVED_LABELS[i])
     {
@@ -522,7 +522,7 @@ function validateLabelName(labelName)
   }
 
   // Check for invalid characters
-  for (var i = 0; i < INVALID_LABEL_CHARS.length; i++)
+  for (let i = 0; i < INVALID_LABEL_CHARS.length; i++)
   {
     if (nameStr.indexOf(INVALID_LABEL_CHARS[i]) > -1)
     {
@@ -548,8 +548,8 @@ function validateLabelName(labelName)
  */
 function validateOrganizationPlan(plan)
 {
-  var errors = [];
-  var warnings = [];
+  const errors = [];
+  const warnings = [];
 
   // Check plan exists
   if (!plan)
@@ -576,9 +576,9 @@ function validateOrganizationPlan(plan)
   }
 
   // Validate each new label name
-  for (var i = 0; i < plan.newLabels.length; i++)
+  for (let i = 0; i < plan.newLabels.length; i++)
   {
-    var validation = validateLabelName(plan.newLabels[i]);
+    const validation = validateLabelName(plan.newLabels[i]);
     if (!validation.valid)
     {
       errors.push('Invalid new label "' + plan.newLabels[i] + '": ' + validation.reason);
@@ -586,9 +586,9 @@ function validateOrganizationPlan(plan)
   }
 
   // Validate each migration rule
-  for (var i = 0; i < plan.migrations.length; i++)
+  for (let i = 0; i < plan.migrations.length; i++)
   {
-    var migration = plan.migrations[i];
+    const migration = plan.migrations[i];
 
     // Check required fields
     if (!migration.from)
@@ -604,22 +604,22 @@ function validateOrganizationPlan(plan)
     }
 
     // Check if source label exists
-    var sourceLabel = GmailApp.getUserLabelByName(migration.from);
+    const sourceLabel = GmailApp.getUserLabelByName(migration.from);
     if (!sourceLabel)
     {
       warnings.push('Source label "' + migration.from + '" does not exist (will be skipped)');
     }
 
     // Validate destination label name
-    var destValidation = validateLabelName(migration.to);
+    const destValidation = validateLabelName(migration.to);
     if (!destValidation.valid)
     {
       errors.push('Invalid destination label "' + migration.to + '": ' + destValidation.reason);
     }
 
     // Check if destination is in newLabels or already exists
-    var destExists = GmailApp.getUserLabelByName(migration.to);
-    var destInPlan = plan.newLabels.indexOf(migration.to) > -1;
+    const destExists = GmailApp.getUserLabelByName(migration.to);
+    const destInPlan = plan.newLabels.indexOf(migration.to) > -1;
     if (!destExists && !destInPlan)
     {
       warnings.push('Destination "' + migration.to + '" not in newLabels (will be created during migration)');
@@ -627,10 +627,10 @@ function validateOrganizationPlan(plan)
   }
 
   // Check for duplicate migrations (same source label twice)
-  var seenFrom = {};
-  for (var i = 0; i < plan.migrations.length; i++)
+  const seenFrom = {};
+  for (let i = 0; i < plan.migrations.length; i++)
   {
-    var from = plan.migrations[i].from;
+    const from = plan.migrations[i].from;
     if (seenFrom[from])
     {
       warnings.push('Label "' + from + '" appears in multiple migrations');
@@ -654,16 +654,16 @@ function validateOrganizationPlan(plan)
  */
 function listAllLabelsDetailed()
 {
-  var labels = GmailApp.getUserLabels();
-  var labelData = [];
+  const labels = GmailApp.getUserLabels();
+  const labelData = [];
 
   log('Scanning ' + labels.length + ' labels...');
 
-  for (var i = 0; i < labels.length; i++)
+  for (let i = 0; i < labels.length; i++)
   {
-    var label = labels[i];
-    var name = label.getName();
-    var threadCount = getThreadCountForLabel(label);
+    const label = labels[i];
+    const name = label.getName();
+    const threadCount = getThreadCountForLabel(label);
 
     labelData.push({
       name: name,
@@ -678,7 +678,7 @@ function listAllLabelsDetailed()
   });
 
   Logger.log('=== ALL GMAIL LABELS ===');
-  for (var i = 0; i < labelData.length; i++)
+  for (let i = 0; i < labelData.length; i++)
   {
     Logger.log('"' + labelData[i].name + '": ' + labelData[i].threads + ' threads');
   }
@@ -694,13 +694,13 @@ function listAllLabelsDetailed()
  */
 function findDuplicateLabels()
 {
-  var labels = GmailApp.getUserLabels();
-  var seen = {};
-  var duplicates = [];
+  const labels = GmailApp.getUserLabels();
+  const seen = {};
+  const duplicates = [];
 
-  for (var i = 0; i < labels.length; i++)
+  for (let i = 0; i < labels.length; i++)
   {
-    var name = labels[i].getName().toLowerCase();
+    const name = labels[i].getName().toLowerCase();
     if (seen[name])
     {
       duplicates.push({
@@ -717,7 +717,7 @@ function findDuplicateLabels()
   if (duplicates.length > 0)
   {
     Logger.log('=== DUPLICATE LABELS FOUND ===');
-    for (var i = 0; i < duplicates.length; i++)
+    for (let i = 0; i < duplicates.length; i++)
     {
       Logger.log('  "' + duplicates[i].original + '" vs "' + duplicates[i].duplicate + '"');
     }
@@ -737,13 +737,13 @@ function findDuplicateLabels()
  */
 function exportLabelStructure()
 {
-  var labels = GmailApp.getUserLabels();
-  var structure = [];
+  const labels = GmailApp.getUserLabels();
+  const structure = [];
 
-  for (var i = 0; i < labels.length; i++)
+  for (let i = 0; i < labels.length; i++)
   {
-    var label = labels[i];
-    var threadCount = getThreadCountForLabel(label);
+    const label = labels[i];
+    const threadCount = getThreadCountForLabel(label);
 
     structure.push({
       name: label.getName(),
@@ -776,15 +776,15 @@ function deleteEmptyLabels(dryRun)
     dryRun = true;
   }
 
-  var labels = GmailApp.getUserLabels();
-  var emptyLabels = [];
+  const labels = GmailApp.getUserLabels();
+  const emptyLabels = [];
 
   log('Scanning for empty labels...');
 
-  for (var i = 0; i < labels.length; i++)
+  for (let i = 0; i < labels.length; i++)
   {
-    var label = labels[i];
-    var threads = label.getThreads(0, 1);
+    const label = labels[i];
+    const threads = label.getThreads(0, 1);
 
     if (threads.length === 0)
     {
@@ -793,7 +793,7 @@ function deleteEmptyLabels(dryRun)
   }
 
   Logger.log('=== EMPTY LABELS (' + emptyLabels.length + ') ===');
-  for (var i = 0; i < emptyLabels.length; i++)
+  for (let i = 0; i < emptyLabels.length; i++)
   {
     Logger.log('  ' + emptyLabels[i].getName());
   }
@@ -807,7 +807,7 @@ function deleteEmptyLabels(dryRun)
   {
     Logger.log('');
     Logger.log('Deleting ' + emptyLabels.length + ' empty labels...');
-    for (var i = 0; i < emptyLabels.length; i++)
+    for (let i = 0; i < emptyLabels.length; i++)
     {
       try
       {
@@ -854,11 +854,9 @@ function hasTimeRemaining(startTime, maxRuntime, buffer)
     return false;
   }
 
-  // Use default buffer if not provided or invalid
-  buffer = (typeof buffer === 'number' && !isNaN(buffer)) ? buffer : CONSTANTS.DEFAULT_TIME_BUFFER_MS;
-
-  var elapsed = new Date().getTime() - startTime;
-  return (maxRuntime - elapsed) > buffer;
+  const effectiveBuffer = (typeof buffer === 'number' && !isNaN(buffer)) ? buffer : CONSTANTS.DEFAULT_TIME_BUFFER_MS;
+  const elapsed = new Date().getTime() - startTime;
+  return (maxRuntime - elapsed) > effectiveBuffer;
 }
 
 /**
@@ -870,7 +868,7 @@ function hasTimeRemaining(startTime, maxRuntime, buffer)
  */
 function getRemainingSeconds(startTime, maxRuntime)
 {
-  var elapsed = new Date().getTime() - startTime;
+  const elapsed = new Date().getTime() - startTime;
   return Math.max(0, Math.floor((maxRuntime - elapsed) / 1000));
 }
 
@@ -887,25 +885,25 @@ function getRemainingSeconds(startTime, maxRuntime)
  */
 function estimateMigrationTime(plan)
 {
-  var totalThreads = 0;
-  var existingSourceLabels = 0;
+  let totalThreads = 0;
+  let existingSourceLabels = 0;
 
   // Count threads in all source labels
-  for (var i = 0; i < plan.migrations.length; i++)
+  for (let i = 0; i < plan.migrations.length; i++)
   {
-    var fromLabel = GmailApp.getUserLabelByName(plan.migrations[i].from);
+    const fromLabel = GmailApp.getUserLabelByName(plan.migrations[i].from);
     if (fromLabel)
     {
       existingSourceLabels++;
-      var count = getThreadCountForLabel(fromLabel);
+      const count = getThreadCountForLabel(fromLabel);
       totalThreads += count;
     }
   }
 
   // Rough estimate: ~1 second per thread for processing
-  var estimatedSeconds = totalThreads;
-  var estimatedMinutes = Math.ceil(estimatedSeconds / 60);
-  var expectedRuns = Math.ceil(estimatedMinutes / 5);
+  const estimatedSeconds = totalThreads;
+  const estimatedMinutes = Math.ceil(estimatedSeconds / 60);
+  const expectedRuns = Math.ceil(estimatedMinutes / 5);
 
   Logger.log('=== MIGRATION ESTIMATE ===');
   Logger.log('Source labels found: ' + existingSourceLabels + '/' + plan.migrations.length);

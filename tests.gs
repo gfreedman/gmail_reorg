@@ -12,16 +12,6 @@
 // ============================================================================
 
 /**
- * Global test results tracker
- */
-var TestResults =
-{
-  passed: 0,
-  failed: 0,
-  errors: []
-};
-
-/**
  * Assert that a condition is true.
  *
  * @param {boolean} condition - Condition to test
@@ -113,19 +103,20 @@ function assertContains(array, value, message)
  *
  * @param {string} testName - Name of the test
  * @param {Function} testFn - Test function to execute
+ * @param {Object} results - Results accumulator {passed, failed, errors}
  */
-function runTest(testName, testFn)
+function runTest(testName, testFn, results)
 {
   try
   {
     testFn();
-    TestResults.passed++;
+    results.passed++;
     Logger.log('  PASS: ' + testName);
   }
   catch (e)
   {
-    TestResults.failed++;
-    TestResults.errors.push({test: testName, error: e.message});
+    results.failed++;
+    results.errors.push({test: testName, error: e.message});
     Logger.log('  FAIL: ' + testName + ' - ' + e.message);
   }
 }
@@ -136,91 +127,93 @@ function runTest(testName, testFn)
 
 /**
  * Test suite for validateLabelName function
+ *
+ * @param {Object} results - Results accumulator
  */
-function testValidateLabelName()
+function testValidateLabelName(results)
 {
   Logger.log('=== validateLabelName Tests ===');
 
   runTest('Valid simple label', function()
   {
-    var result = validateLabelName('MyLabel');
+    const result = validateLabelName('MyLabel');
     assert(result.valid === true, 'Should be valid');
     assertNull(result.reason, 'Should have no reason');
-  });
+  }, results);
 
   runTest('Valid nested label', function()
   {
-    var result = validateLabelName('Parent/Child/Grandchild');
+    const result = validateLabelName('Parent/Child/Grandchild');
     assert(result.valid === true, 'Should be valid');
-  });
+  }, results);
 
   runTest('Empty label rejected', function()
   {
-    var result = validateLabelName('');
+    const result = validateLabelName('');
     assert(result.valid === false, 'Should be invalid');
     assertNotNull(result.reason, 'Should have a reason');
-  });
+  }, results);
 
   runTest('Null label rejected', function()
   {
-    var result = validateLabelName(null);
+    const result = validateLabelName(null);
     assert(result.valid === false, 'Should be invalid');
-  });
+  }, results);
 
   runTest('Whitespace-only label rejected', function()
   {
-    var result = validateLabelName('   ');
+    const result = validateLabelName('   ');
     assert(result.valid === false, 'Should be invalid');
-  });
+  }, results);
 
   runTest('Reserved label "inbox" rejected', function()
   {
-    var result = validateLabelName('inbox');
+    const result = validateLabelName('inbox');
     assert(result.valid === false, 'Should be invalid');
     assert(result.reason.indexOf('reserved') > -1, 'Should mention reserved');
-  });
+  }, results);
 
   runTest('Reserved label case insensitive', function()
   {
-    var result = validateLabelName('INBOX');
+    const result = validateLabelName('INBOX');
     assert(result.valid === false, 'Should be invalid');
-  });
+  }, results);
 
   runTest('Invalid character < rejected', function()
   {
-    var result = validateLabelName('Test<Label');
+    const result = validateLabelName('Test<Label');
     assert(result.valid === false, 'Should be invalid');
     assert(result.reason.indexOf('<') > -1, 'Should mention the character');
-  });
+  }, results);
 
   runTest('Invalid character & rejected', function()
   {
-    var result = validateLabelName('Test&Label');
+    const result = validateLabelName('Test&Label');
     assert(result.valid === false, 'Should be invalid');
-  });
+  }, results);
 
   runTest('Label exceeding 225 chars rejected', function()
   {
-    var longName = '';
-    for (var i = 0; i < 230; i++)
+    let longName = '';
+    for (let i = 0; i < 230; i++)
     {
       longName += 'a';
     }
-    var result = validateLabelName(longName);
+    const result = validateLabelName(longName);
     assert(result.valid === false, 'Should be invalid');
     assert(result.reason.indexOf('225') > -1, 'Should mention limit');
-  });
+  }, results);
 
   runTest('Label at exactly 225 chars accepted', function()
   {
-    var exactName = '';
-    for (var i = 0; i < 225; i++)
+    let exactName = '';
+    for (let i = 0; i < 225; i++)
     {
       exactName += 'a';
     }
-    var result = validateLabelName(exactName);
+    const result = validateLabelName(exactName);
     assert(result.valid === true, 'Should be valid');
-  });
+  }, results);
 }
 
 // ============================================================================
@@ -229,62 +222,64 @@ function testValidateLabelName()
 
 /**
  * Test suite for validateOrganizationPlan function
+ *
+ * @param {Object} results - Results accumulator
  */
-function testValidateOrganizationPlan()
+function testValidateOrganizationPlan(results)
 {
   Logger.log('=== validateOrganizationPlan Tests ===');
 
   runTest('Null plan rejected', function()
   {
-    var result = validateOrganizationPlan(null);
+    const result = validateOrganizationPlan(null);
     assert(result.valid === false, 'Should be invalid');
     assert(result.errors.length > 0, 'Should have errors');
-  });
+  }, results);
 
   runTest('Plan without newLabels rejected', function()
   {
-    var result = validateOrganizationPlan({migrations: []});
+    const result = validateOrganizationPlan({migrations: []});
     assert(result.valid === false, 'Should be invalid');
     assert(result.errors.some(function(e)
     {
       return e.indexOf('newLabels') > -1;
     }), 'Should mention newLabels');
-  });
+  }, results);
 
   runTest('Plan without migrations rejected', function()
   {
-    var result = validateOrganizationPlan({newLabels: []});
+    const result = validateOrganizationPlan({newLabels: []});
     assert(result.valid === false, 'Should be invalid');
-  });
+  }, results);
 
   runTest('Valid empty plan accepted', function()
   {
-    var result = validateOrganizationPlan({newLabels: [], migrations: []});
+    const result = validateOrganizationPlan({newLabels: [], migrations: []});
     assert(result.valid === true, 'Should be valid');
-  });
+  }, results);
 
   runTest('Plan with valid labels accepted', function()
   {
-    var result = validateOrganizationPlan({
+    const result = validateOrganizationPlan({
       newLabels: ['Personal', 'Work', 'Archive'],
       migrations: []
     });
     assert(result.valid === true, 'Should be valid');
     assertEquals(result.errors.length, 0, 'Should have no errors');
-  });
+  }, results);
 
   runTest('Plan with invalid label rejected', function()
   {
-    var result = validateOrganizationPlan({
+    const result = validateOrganizationPlan({
       newLabels: ['Personal', 'inbox', 'Archive'],
       migrations: []
     });
     assert(result.valid === false, 'Should be invalid');
-  });
+  }, results);
 
   runTest('Migration without from field rejected', function()
   {
-    var result = validateOrganizationPlan({
+    const result = validateOrganizationPlan({
       newLabels: ['Archive'],
       migrations: [{to: 'Archive'}]
     });
@@ -293,20 +288,20 @@ function testValidateOrganizationPlan()
     {
       return e.indexOf('from') > -1;
     }), 'Should mention from');
-  });
+  }, results);
 
   runTest('Migration without to field rejected', function()
   {
-    var result = validateOrganizationPlan({
+    const result = validateOrganizationPlan({
       newLabels: ['Archive'],
       migrations: [{from: 'OldLabel'}]
     });
     assert(result.valid === false, 'Should be invalid');
-  });
+  }, results);
 
   runTest('Duplicate migrations generate warning', function()
   {
-    var result = validateOrganizationPlan({
+    const result = validateOrganizationPlan({
       newLabels: ['Archive'],
       migrations:
       [
@@ -318,7 +313,7 @@ function testValidateOrganizationPlan()
     {
       return w.indexOf('multiple') > -1;
     }), 'Should warn about duplicates');
-  });
+  }, results);
 }
 
 // ============================================================================
@@ -327,52 +322,54 @@ function testValidateOrganizationPlan()
 
 /**
  * Test suite for time management functions
+ *
+ * @param {Object} results - Results accumulator
  */
-function testTimeManagement()
+function testTimeManagement(results)
 {
   Logger.log('=== Time Management Tests ===');
 
   runTest('hasTimeRemaining returns true when time available', function()
   {
-    var startTime = new Date().getTime();
-    var result = hasTimeRemaining(startTime, 300000, 30000);
+    const startTime = new Date().getTime();
+    const result = hasTimeRemaining(startTime, 300000, 30000);
     assert(result === true, 'Should have time remaining');
-  });
+  }, results);
 
   runTest('hasTimeRemaining returns false when time expired', function()
   {
-    var startTime = new Date().getTime() - 300000;  // 5 minutes ago
-    var result = hasTimeRemaining(startTime, 300000, 30000);
+    const startTime = new Date().getTime() - 300000;  // 5 minutes ago
+    const result = hasTimeRemaining(startTime, 300000, 30000);
     assert(result === false, 'Should not have time remaining');
-  });
+  }, results);
 
   runTest('hasTimeRemaining respects buffer', function()
   {
-    var startTime = new Date().getTime() - 275000;  // 4:35 elapsed
-    var result = hasTimeRemaining(startTime, 300000, 30000);  // 30s buffer
+    const startTime = new Date().getTime() - 275000;  // 4:35 elapsed
+    const result = hasTimeRemaining(startTime, 300000, 30000);  // 30s buffer
     assert(result === false, 'Should account for buffer');
-  });
+  }, results);
 
   runTest('hasTimeRemaining default buffer is 30000', function()
   {
-    var startTime = new Date().getTime() - 260000;  // 4:20 elapsed
-    var result = hasTimeRemaining(startTime, 300000);
+    const startTime = new Date().getTime() - 260000;  // 4:20 elapsed
+    const result = hasTimeRemaining(startTime, 300000);
     assert(result === true, 'Should use default buffer');
-  });
+  }, results);
 
   runTest('getRemainingSeconds calculates correctly', function()
   {
-    var startTime = new Date().getTime() - 60000;  // 1 minute ago
-    var result = getRemainingSeconds(startTime, 300000);
+    const startTime = new Date().getTime() - 60000;  // 1 minute ago
+    const result = getRemainingSeconds(startTime, 300000);
     assert(result >= 239 && result <= 241, 'Should be around 240 seconds');
-  });
+  }, results);
 
   runTest('getRemainingSeconds never returns negative', function()
   {
-    var startTime = new Date().getTime() - 400000;  // Past limit
-    var result = getRemainingSeconds(startTime, 300000);
+    const startTime = new Date().getTime() - 400000;  // Past limit
+    const result = getRemainingSeconds(startTime, 300000);
     assertEquals(result, 0, 'Should return 0, not negative');
-  });
+  }, results);
 }
 
 // ============================================================================
@@ -381,16 +378,18 @@ function testTimeManagement()
 
 /**
  * Test suite for utility functions
+ *
+ * @param {Object} results - Results accumulator
  */
-function testUtilityFunctions()
+function testUtilityFunctions(results)
 {
   Logger.log('=== Utility Function Tests ===');
 
   runTest('formatTimestamp returns ISO format', function()
   {
-    var result = formatTimestamp();
+    const result = formatTimestamp();
     assert(result.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/), 'Should be ISO format');
-  });
+  }, results);
 
   runTest('PROPERTY_KEYS are defined', function()
   {
@@ -398,7 +397,7 @@ function testUtilityFunctions()
     assertNotNull(PROPERTY_KEYS.LAST_RUN, 'LAST_RUN should exist');
     assertNotNull(PROPERTY_KEYS.COMPLETED_MIGRATIONS, 'COMPLETED_MIGRATIONS should exist');
     assertNotNull(PROPERTY_KEYS.STATISTICS, 'STATISTICS should exist');
-  });
+  }, results);
 
   runTest('RESERVED_LABELS contains common labels', function()
   {
@@ -406,14 +405,14 @@ function testUtilityFunctions()
     assertContains(RESERVED_LABELS, 'sent', 'Should contain sent');
     assertContains(RESERVED_LABELS, 'trash', 'Should contain trash');
     assertContains(RESERVED_LABELS, 'spam', 'Should contain spam');
-  });
+  }, results);
 
   runTest('INVALID_LABEL_CHARS contains special characters', function()
   {
     assertContains(INVALID_LABEL_CHARS, '&', 'Should contain &');
     assertContains(INVALID_LABEL_CHARS, '<', 'Should contain <');
     assertContains(INVALID_LABEL_CHARS, '>', 'Should contain >');
-  });
+  }, results);
 }
 
 // ============================================================================
@@ -423,89 +422,91 @@ function testUtilityFunctions()
 /**
  * Test suite for state persistence functions.
  * Note: These tests use actual PropertiesService.
+ *
+ * @param {Object} results - Results accumulator
  */
-function testStatePersistence()
+function testStatePersistence(results)
 {
   Logger.log('=== State Persistence Tests ===');
 
   // Clean up before tests
-  var props = PropertiesService.getScriptProperties();
+  const props = PropertiesService.getScriptProperties();
   props.deleteProperty(PROPERTY_KEYS.MIGRATION_STATE);
   props.deleteProperty(PROPERTY_KEYS.COMPLETED_MIGRATIONS);
   props.deleteProperty(PROPERTY_KEYS.STATISTICS);
 
   runTest('loadMigrationState returns null when no state', function()
   {
-    var result = loadMigrationState();
+    const result = loadMigrationState();
     assertNull(result, 'Should return null');
-  });
+  }, results);
 
   runTest('saveMigrationState and loadMigrationState roundtrip', function()
   {
-    var testState = {lastIndex: 5, timestamp: '2024-01-01'};
+    const testState = {lastIndex: 5, timestamp: '2024-01-01'};
     saveMigrationState(testState);
-    var result = loadMigrationState();
+    const result = loadMigrationState();
     assertDeepEquals(result, testState, 'Should roundtrip correctly');
-  });
+  }, results);
 
   runTest('clearMigrationState removes state', function()
   {
     saveMigrationState({test: true});
     clearMigrationState();
-    var result = loadMigrationState();
+    const result = loadMigrationState();
     assertNull(result, 'Should be cleared');
-  });
+  }, results);
 
   runTest('getCompletedMigrations returns empty array when none', function()
   {
-    var result = getCompletedMigrations();
+    const result = getCompletedMigrations();
     assert(Array.isArray(result), 'Should be array');
     assertEquals(result.length, 0, 'Should be empty');
-  });
+  }, results);
 
   runTest('markMigrationCompleted adds to list', function()
   {
     markMigrationCompleted('OldLabel', 'NewLabel', 10);
-    var result = getCompletedMigrations();
+    const result = getCompletedMigrations();
     assertEquals(result.length, 1, 'Should have one entry');
     assertEquals(result[0].from, 'OldLabel', 'Should have correct from');
     assertEquals(result[0].to, 'NewLabel', 'Should have correct to');
     assertEquals(result[0].threads, 10, 'Should have correct threads');
-  });
+  }, results);
 
   runTest('isMigrationCompleted returns true for completed', function()
   {
-    var result = isMigrationCompleted('OldLabel');
+    const result = isMigrationCompleted('OldLabel');
     assert(result === true, 'Should return true');
-  });
+  }, results);
 
   runTest('isMigrationCompleted returns false for not completed', function()
   {
-    var result = isMigrationCompleted('NonExistent');
+    const result = isMigrationCompleted('NonExistent');
     assert(result === false, 'Should return false');
-  });
+  }, results);
 
   runTest('getStatistics returns object', function()
   {
-    var result = getStatistics();
+    const result = getStatistics();
     assert(typeof result === 'object', 'Should be object');
-  });
+  }, results);
 
   runTest('updateStatistics increments values', function()
   {
     updateStatistics(100, 5);
-    var result = getStatistics();
+    const result = getStatistics();
     assert(result.totalThreadsProcessed >= 100, 'Should have threads');
     assert(result.totalLabelsCreated >= 5, 'Should have labels');
     assert(result.runCount >= 1, 'Should have run count');
-  });
+  }, results);
 
   runTest('resetAllMigrationTracking clears everything', function()
   {
     resetAllMigrationTracking();
     assertNull(loadMigrationState(), 'State should be null');
     assertEquals(getCompletedMigrations().length, 0, 'Completed should be empty');
-  });
+  }, results);
 }
 
 // ============================================================================
@@ -514,8 +515,10 @@ function testStatePersistence()
 
 /**
  * Test suite for category detection
+ *
+ * @param {Object} results - Results accumulator
  */
-function testCategoryDetection()
+function testCategoryDetection(results)
 {
   Logger.log('=== Category Detection Tests ===');
 
@@ -523,38 +526,38 @@ function testCategoryDetection()
   {
     assertEquals(detectCategory('myproject'), 'work', 'Should detect project as work');
     assertEquals(detectCategory('client-acme'), 'work', 'Should detect client as work');
-  });
+  }, results);
 
   runTest('detectCategory finds finance keywords', function()
   {
     assertEquals(detectCategory('bank-statements'), 'finance', 'Should detect bank as finance');
     assertEquals(detectCategory('taxes-2024'), 'finance', 'Should detect tax as finance');
-  });
+  }, results);
 
   runTest('detectCategory finds personal keywords', function()
   {
     assertEquals(detectCategory('family-updates'), 'personal', 'Should detect family as personal');
-  });
+  }, results);
 
   runTest('detectCategory finds shopping keywords', function()
   {
     assertEquals(detectCategory('amazon-orders'), 'shopping', 'Should detect amazon as shopping');
     assertEquals(detectCategory('shipping-info'), 'shopping', 'Should detect shipping as shopping');
-  });
+  }, results);
 
   runTest('detectCategory returns null for unknown', function()
   {
     assertNull(detectCategory('randomlabel123'), 'Should return null for unknown');
-  });
+  }, results);
 
   runTest('CATEGORY_PATTERNS structure is valid', function()
   {
-    for (var cat in CATEGORY_PATTERNS)
+    for (const cat of Object.keys(CATEGORY_PATTERNS))
     {
       assert(Array.isArray(CATEGORY_PATTERNS[cat].keywords), cat + ' should have keywords array');
       assert(Array.isArray(CATEGORY_PATTERNS[cat].domains), cat + ' should have domains array');
     }
-  });
+  }, results);
 }
 
 // ============================================================================
@@ -563,62 +566,64 @@ function testCategoryDetection()
 
 /**
  * Test edge cases and boundary conditions
+ *
+ * @param {Object} results - Results accumulator
  */
-function testEdgeCases()
+function testEdgeCases(results)
 {
   Logger.log('=== Edge Case Tests ===');
 
   runTest('validateLabelName handles undefined', function()
   {
-    var result = validateLabelName(undefined);
+    const result = validateLabelName(undefined);
     assert(result.valid === false, 'Should reject undefined');
-  });
+  }, results);
 
   runTest('validateLabelName handles number input', function()
   {
-    var result = validateLabelName(123);
+    const result = validateLabelName(123);
     // Should handle gracefully - either reject or convert
     assert(result !== undefined, 'Should not crash');
-  });
+  }, results);
 
   runTest('validateLabelName handles object input', function()
   {
-    var result = validateLabelName({name: 'test'});
+    const result = validateLabelName({name: 'test'});
     assert(result !== undefined, 'Should not crash');
-  });
+  }, results);
 
   runTest('Empty migrations array is valid', function()
   {
-    var result = validateOrganizationPlan({
+    const result = validateOrganizationPlan({
       newLabels: ['Test'],
       migrations: []
     });
     assert(result.valid === true, 'Empty migrations should be valid');
-  });
+  }, results);
 
   runTest('Labels with spaces are valid', function()
   {
-    var result = validateLabelName('My Label Name');
+    const result = validateLabelName('My Label Name');
     assert(result.valid === true, 'Labels with spaces should be valid');
-  });
+  }, results);
 
   runTest('Labels with numbers are valid', function()
   {
-    var result = validateLabelName('Project2024');
+    const result = validateLabelName('Project2024');
     assert(result.valid === true, 'Labels with numbers should be valid');
-  });
+  }, results);
 
   runTest('Labels with dashes are valid', function()
   {
-    var result = validateLabelName('my-label-name');
+    const result = validateLabelName('my-label-name');
     assert(result.valid === true, 'Labels with dashes should be valid');
-  });
+  }, results);
 
   runTest('Labels with underscores are valid', function()
   {
-    var result = validateLabelName('my_label_name');
+    const result = validateLabelName('my_label_name');
     assert(result.valid === true, 'Labels with underscores should be valid');
-  });
+  }, results);
 }
 
 // ============================================================================
@@ -627,49 +632,51 @@ function testEdgeCases()
 
 /**
  * Test configuration objects
+ *
+ * @param {Object} results - Results accumulator
  */
-function testConfiguration()
+function testConfiguration(results)
 {
   Logger.log('=== Configuration Tests ===');
 
   runTest('CONFIG object exists', function()
   {
     assertNotNull(CONFIG, 'CONFIG should exist');
-  });
+  }, results);
 
   runTest('CONFIG has required properties', function()
   {
     assert('DRY_RUN' in CONFIG, 'Should have DRY_RUN');
     assert('BATCH_SIZE' in CONFIG, 'Should have BATCH_SIZE');
     assert('MAX_RUNTIME_MS' in CONFIG, 'Should have MAX_RUNTIME_MS');
-  });
+  }, results);
 
   runTest('CONFIG.DRY_RUN defaults to true', function()
   {
     assert(CONFIG.DRY_RUN === true, 'DRY_RUN should default to true for safety');
-  });
+  }, results);
 
   runTest('CONFIG.BATCH_SIZE is reasonable', function()
   {
     assert(CONFIG.BATCH_SIZE > 0, 'BATCH_SIZE should be positive');
     assert(CONFIG.BATCH_SIZE <= 500, 'BATCH_SIZE should not exceed API limits');
-  });
+  }, results);
 
   runTest('CONFIG.MAX_RUNTIME_MS is under 6 minutes', function()
   {
     assert(CONFIG.MAX_RUNTIME_MS < 360000, 'Should be under Apps Script limit');
-  });
+  }, results);
 
   runTest('BACKUP_CONFIG object exists', function()
   {
     assertNotNull(BACKUP_CONFIG, 'BACKUP_CONFIG should exist');
-  });
+  }, results);
 
   runTest('ORGANIZATION_PLAN has required structure', function()
   {
     assert(Array.isArray(ORGANIZATION_PLAN.newLabels), 'Should have newLabels array');
     assert(Array.isArray(ORGANIZATION_PLAN.migrations), 'Should have migrations array');
-  });
+  }, results);
 }
 
 // ============================================================================
@@ -679,12 +686,12 @@ function testConfiguration()
 /**
  * Run all test suites.
  * Call this function to execute the complete test suite.
+ *
+ * @return {Object} {passed, failed, errors}
  */
 function runAllTests()
 {
-  TestResults.passed = 0;
-  TestResults.failed = 0;
-  TestResults.errors = [];
+  const results = {passed: 0, failed: 0, errors: []};
 
   Logger.log('');
   Logger.log('========================================');
@@ -693,28 +700,28 @@ function runAllTests()
   Logger.log('');
 
   // Run all test suites
-  testValidateLabelName();
+  testValidateLabelName(results);
   Logger.log('');
 
-  testValidateOrganizationPlan();
+  testValidateOrganizationPlan(results);
   Logger.log('');
 
-  testTimeManagement();
+  testTimeManagement(results);
   Logger.log('');
 
-  testUtilityFunctions();
+  testUtilityFunctions(results);
   Logger.log('');
 
-  testStatePersistence();
+  testStatePersistence(results);
   Logger.log('');
 
-  testCategoryDetection();
+  testCategoryDetection(results);
   Logger.log('');
 
-  testEdgeCases();
+  testEdgeCases(results);
   Logger.log('');
 
-  testConfiguration();
+  testConfiguration(results);
   Logger.log('');
 
   // Summary
@@ -722,17 +729,17 @@ function runAllTests()
   Logger.log('              TEST RESULTS             ');
   Logger.log('========================================');
   Logger.log('');
-  Logger.log('  Passed: ' + TestResults.passed);
-  Logger.log('  Failed: ' + TestResults.failed);
-  Logger.log('  Total:  ' + (TestResults.passed + TestResults.failed));
+  Logger.log('  Passed: ' + results.passed);
+  Logger.log('  Failed: ' + results.failed);
+  Logger.log('  Total:  ' + (results.passed + results.failed));
   Logger.log('');
 
-  if (TestResults.failed > 0)
+  if (results.failed > 0)
   {
     Logger.log('=== FAILURES ===');
-    for (var i = 0; i < TestResults.errors.length; i++)
+    for (let i = 0; i < results.errors.length; i++)
     {
-      var err = TestResults.errors[i];
+      const err = results.errors[i];
       Logger.log('  ' + err.test + ': ' + err.error);
     }
   }
@@ -743,51 +750,47 @@ function runAllTests()
 
   Logger.log('');
 
-  return {
-    passed: TestResults.passed,
-    failed: TestResults.failed,
-    errors: TestResults.errors
-  };
+  return results;
 }
 
 /**
  * Quick smoke test - runs minimal tests to verify basic functionality.
  * Use this for fast validation that the library is working.
+ *
+ * @return {boolean} True if all smoke tests passed
  */
 function runSmokeTests()
 {
   Logger.log('=== SMOKE TESTS ===');
 
-  TestResults.passed = 0;
-  TestResults.failed = 0;
-  TestResults.errors = [];
+  const results = {passed: 0, failed: 0, errors: []};
 
   runTest('validateLabelName exists and works', function()
   {
-    var result = validateLabelName('Test');
+    const result = validateLabelName('Test');
     assert(result.valid === true, 'Basic validation should work');
-  });
+  }, results);
 
   runTest('validateOrganizationPlan exists and works', function()
   {
-    var result = validateOrganizationPlan({newLabels: [], migrations: []});
+    const result = validateOrganizationPlan({newLabels: [], migrations: []});
     assert(result.valid === true, 'Basic plan validation should work');
-  });
+  }, results);
 
   runTest('Time functions exist and work', function()
   {
-    var start = new Date().getTime();
+    const start = new Date().getTime();
     assert(hasTimeRemaining(start, 300000) === true, 'Time check should work');
-  });
+  }, results);
 
   runTest('State functions exist', function()
   {
     assert(typeof loadMigrationState === 'function', 'loadMigrationState should exist');
     assert(typeof saveMigrationState === 'function', 'saveMigrationState should exist');
-  });
+  }, results);
 
   Logger.log('');
-  Logger.log('Smoke tests: ' + TestResults.passed + ' passed, ' + TestResults.failed + ' failed');
+  Logger.log('Smoke tests: ' + results.passed + ' passed, ' + results.failed + ' failed');
 
-  return TestResults.failed === 0;
+  return results.failed === 0;
 }

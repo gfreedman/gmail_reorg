@@ -13,7 +13,7 @@
  * Configuration for backup operations
  * Modify these values to customize backup behavior
  */
-var BACKUP_CONFIG =
+const BACKUP_CONFIG =
 {
   // Maximum threads to process before flushing to prevent timeout
   FLUSH_INTERVAL: 100,
@@ -43,18 +43,18 @@ var BACKUP_CONFIG =
  */
 function createBackup()
 {
-  var startTime = new Date().getTime();
+  const startTime = new Date().getTime();
 
   log('Starting Gmail backup...');
 
   // Create the spreadsheet with today's date
-  var dateStr = new Date().toISOString().split('T')[0];
-  var ss = SpreadsheetApp.create(BACKUP_CONFIG.BACKUP_NAME_PREFIX + ' - ' + dateStr);
-  var sheet = ss.getActiveSheet();
+  const dateStr = new Date().toISOString().split('T')[0];
+  const ss = SpreadsheetApp.create(BACKUP_CONFIG.BACKUP_NAME_PREFIX + ' - ' + dateStr);
+  const sheet = ss.getActiveSheet();
   sheet.setName('Email Inventory');
 
   // Set up headers
-  var headers = ['Thread ID', 'Subject', 'From', 'Date', 'Labels', 'Message Count', 'Is Unread'];
+  const headers = ['Thread ID', 'Subject', 'From', 'Date', 'Labels', 'Message Count', 'Is Unread'];
   if (BACKUP_CONFIG.INCLUDE_BODY_PREVIEW)
   {
     headers.push('Body Preview');
@@ -64,15 +64,15 @@ function createBackup()
   sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
   sheet.setFrozenRows(1);
 
-  var labels = GmailApp.getUserLabels();
-  var processedThreadIds = {};  // Track processed threads to avoid duplicates
-  var row = 2;
-  var skippedCount = 0;
+  const labels = GmailApp.getUserLabels();
+  const processedThreadIds = {};  // Track processed threads to avoid duplicates
+  let row = 2;
+  let skippedCount = 0;
 
   log('Found ' + labels.length + ' labels to process');
 
   // Process each label
-  for (var i = 0; i < labels.length; i++)
+  for (let i = 0; i < labels.length; i++)
   {
     // Check time remaining before processing each label
     if (!hasTimeRemaining(startTime, BACKUP_CONFIG.MAX_RUNTIME_MS))
@@ -81,12 +81,12 @@ function createBackup()
       break;
     }
 
-    var label = labels[i];
-    var labelName = label.getName();
+    const label = labels[i];
+    const labelName = label.getName();
 
     log('Processing label ' + (i + 1) + '/' + labels.length + ': ' + labelName);
 
-    var threads;
+    let threads;
     try
     {
       threads = getAllThreadsFromLabel(label);
@@ -98,10 +98,10 @@ function createBackup()
     }
 
     // Process each thread in this label
-    for (var j = 0; j < threads.length; j++)
+    for (let j = 0; j < threads.length; j++)
     {
-      var thread = threads[j];
-      var threadId = thread.getId();
+      const thread = threads[j];
+      const threadId = thread.getId();
 
       // Skip if we've already processed this thread (from another label)
       if (processedThreadIds[threadId])
@@ -114,7 +114,7 @@ function createBackup()
 
       try
       {
-        var rowData = extractThreadData(thread);
+        const rowData = extractThreadData(thread);
         sheet.getRange(row, 1, 1, rowData.length).setValues([rowData]);
         row++;
       }
@@ -135,7 +135,7 @@ function createBackup()
   // Format the sheet for readability
   formatBackupSheet(sheet, headers.length);
 
-  var totalThreads = row - 2;
+  const totalThreads = row - 2;
   log('Backup complete!');
   log('Total unique threads: ' + totalThreads);
   log('Duplicate threads skipped: ' + skippedCount);
@@ -154,7 +154,7 @@ function createBackup()
  */
 function extractThreadData(thread)
 {
-  var messages = thread.getMessages();
+  const messages = thread.getMessages();
 
   // Safety check for empty threads
   if (!messages || messages.length === 0)
@@ -162,16 +162,16 @@ function extractThreadData(thread)
     throw new Error('Thread has no messages');
   }
 
-  var firstMessage = messages[0];
-  var labels = thread.getLabels();
+  const firstMessage = messages[0];
+  const labels = thread.getLabels();
 
   // Join all label names with commas
-  var allLabels = labels ? labels.map(function(l)
+  const allLabels = labels ? labels.map(function(l)
   {
     return l.getName();
   }).join(', ') : '';
 
-  var rowData =
+  const rowData =
   [
     thread.getId(),
     thread.getFirstMessageSubject() || '(no subject)',
@@ -185,8 +185,8 @@ function extractThreadData(thread)
   // Optionally add body preview
   if (BACKUP_CONFIG.INCLUDE_BODY_PREVIEW)
   {
-    var body = firstMessage.getPlainBody() || '';
-    var preview = body.substring(0, BACKUP_CONFIG.BODY_PREVIEW_LENGTH).replace(/\n/g, ' ');
+    const body = firstMessage.getPlainBody() || '';
+    const preview = body.substring(0, BACKUP_CONFIG.BODY_PREVIEW_LENGTH).replace(/\n/g, ' ');
     rowData.push(preview);
   }
 
@@ -231,37 +231,37 @@ function createLabelSummary()
 {
   log('Creating label summary...');
 
-  var dateStr = new Date().toISOString().split('T')[0];
-  var ss = SpreadsheetApp.create('Gmail Label Summary - ' + dateStr);
-  var sheet = ss.getActiveSheet();
+  const dateStr = new Date().toISOString().split('T')[0];
+  const ss = SpreadsheetApp.create('Gmail Label Summary - ' + dateStr);
+  const sheet = ss.getActiveSheet();
   sheet.setName('Label Summary');
 
   // Set up headers
-  var headers = ['Label Name', 'Thread Count', 'Nesting Level', 'Parent Label'];
+  const headers = ['Label Name', 'Thread Count', 'Nesting Level', 'Parent Label'];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
   sheet.setFrozenRows(1);
 
-  var labels = GmailApp.getUserLabels();
-  var row = 2;
-  var totalThreads = 0;
+  const labels = GmailApp.getUserLabels();
+  let row = 2;
+  let totalThreads = 0;
 
   // Process each label
-  for (var i = 0; i < labels.length; i++)
+  for (let i = 0; i < labels.length; i++)
   {
-    var label = labels[i];
-    var name = label.getName();
-    var threadCount = getThreadCountForLabel(label);
+    const label = labels[i];
+    const name = label.getName();
+    const threadCount = getThreadCountForLabel(label);
 
     // Calculate nesting level (count slashes)
-    var level = (name.match(/\//g) || []).length;
+    const level = (name.match(/\//g) || []).length;
 
     // Extract parent label name
-    var parent = name.indexOf('/') > -1 ? name.substring(0, name.lastIndexOf('/')) : '';
+    const parent = name.indexOf('/') > -1 ? name.substring(0, name.lastIndexOf('/')) : '';
 
     totalThreads += threadCount;
 
-    var rowData = [name, threadCount, level, parent];
+    const rowData = [name, threadCount, level, parent];
     sheet.getRange(row, 1, 1, rowData.length).setValues([rowData]);
     row++;
   }
@@ -294,34 +294,43 @@ function backupUnreadEmails()
 {
   log('Backing up unread emails...');
 
-  var dateStr = new Date().toISOString().split('T')[0];
-  var ss = SpreadsheetApp.create('Gmail Unread Backup - ' + dateStr);
-  var sheet = ss.getActiveSheet();
+  const dateStr = new Date().toISOString().split('T')[0];
+  const ss = SpreadsheetApp.create('Gmail Unread Backup - ' + dateStr);
+  const sheet = ss.getActiveSheet();
   sheet.setName('Unread Emails');
 
   // Set up headers
-  var headers = ['Thread ID', 'Subject', 'From', 'Date', 'Labels'];
+  const headers = ['Thread ID', 'Subject', 'From', 'Date', 'Labels'];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
   sheet.setFrozenRows(1);
 
   // Search for unread threads
-  var threads = GmailApp.search('is:unread');
-  var row = 2;
+  const threads = GmailApp.search('is:unread');
+  let row = 2;
 
   log('Found ' + threads.length + ' unread threads');
 
   // Process each unread thread
-  for (var i = 0; i < threads.length; i++)
+  for (let i = 0; i < threads.length; i++)
   {
-    var thread = threads[i];
-    var firstMessage = thread.getMessages()[0];
-    var allLabels = thread.getLabels().map(function(l)
+    const thread = threads[i];
+    const messages = thread.getMessages();
+
+    // Safety check for empty threads
+    if (!messages || messages.length === 0)
+    {
+      logWarning('Skipping thread with no messages: ' + thread.getId());
+      continue;
+    }
+
+    const firstMessage = messages[0];
+    const allLabels = thread.getLabels().map(function(l)
     {
       return l.getName();
     }).join(', ');
 
-    var rowData =
+    const rowData =
     [
       thread.getId(),
       thread.getFirstMessageSubject() || '(no subject)',
@@ -358,41 +367,50 @@ function backupDateRange(startDate, endDate)
   }
 
   // Format dates for Gmail search query
-  var startStr = Utilities.formatDate(startDate, Session.getScriptTimeZone(), 'yyyy/MM/dd');
-  var endStr = Utilities.formatDate(endDate, Session.getScriptTimeZone(), 'yyyy/MM/dd');
+  const startStr = Utilities.formatDate(startDate, Session.getScriptTimeZone(), 'yyyy/MM/dd');
+  const endStr = Utilities.formatDate(endDate, Session.getScriptTimeZone(), 'yyyy/MM/dd');
 
   log('Backing up emails from ' + startStr + ' to ' + endStr);
 
   // Build Gmail search query
-  var query = 'after:' + startStr + ' before:' + endStr;
-  var threads = GmailApp.search(query);
+  const query = 'after:' + startStr + ' before:' + endStr;
+  const threads = GmailApp.search(query);
 
   // Create the spreadsheet
-  var dateStr = new Date().toISOString().split('T')[0];
-  var ss = SpreadsheetApp.create('Gmail Backup (' + startStr + ' to ' + endStr + ') - ' + dateStr);
-  var sheet = ss.getActiveSheet();
+  const dateStr = new Date().toISOString().split('T')[0];
+  const ss = SpreadsheetApp.create('Gmail Backup (' + startStr + ' to ' + endStr + ') - ' + dateStr);
+  const sheet = ss.getActiveSheet();
   sheet.setName('Email Backup');
 
   // Set up headers
-  var headers = ['Thread ID', 'Subject', 'From', 'Date', 'Labels', 'Message Count'];
+  const headers = ['Thread ID', 'Subject', 'From', 'Date', 'Labels', 'Message Count'];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
   sheet.setFrozenRows(1);
 
-  var row = 2;
+  let row = 2;
   log('Found ' + threads.length + ' threads in date range');
 
   // Process each thread
-  for (var i = 0; i < threads.length; i++)
+  for (let i = 0; i < threads.length; i++)
   {
-    var thread = threads[i];
-    var firstMessage = thread.getMessages()[0];
-    var allLabels = thread.getLabels().map(function(l)
+    const thread = threads[i];
+    const messages = thread.getMessages();
+
+    // Safety check for empty threads
+    if (!messages || messages.length === 0)
+    {
+      logWarning('Skipping thread with no messages: ' + thread.getId());
+      continue;
+    }
+
+    const firstMessage = messages[0];
+    const allLabels = thread.getLabels().map(function(l)
     {
       return l.getName();
     }).join(', ');
 
-    var rowData =
+    const rowData =
     [
       thread.getId(),
       thread.getFirstMessageSubject() || '(no subject)',
