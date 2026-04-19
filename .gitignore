@@ -14,6 +14,7 @@ backups/
 *.json
 !package.json
 !package-lock.json
+!appsscript.json
 
 # Logs
 *.log
@@ -44,10 +45,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# clasp (Google Apps Script CLI)
+# clasp (Google Apps Script CLI) - script ID is deployment-specific, not committed
 .clasp.json
 .clasprc.json
-appsscript.json
+# appsscript.json is the project manifest and IS tracked
 
 # Environment files
 .env
