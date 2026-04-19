@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Google Sheets UI for configuration
 - Scheduled migrations via triggers
 - Email notification on completion
-- Undo/rollback functionality
+- Formal undo/rollback command (reverse migrations are already supported manually)
 - Import/export migration plans
 
 ## [1.0.0] - 2026-01-24
@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Analysis Engine**
   - `analyzeLabelStructure()` - Comprehensive label analysis
-  - Smart category detection (work, finance, personal, shopping, travel, learning, newsletters)
+  - Category detection (work, finance, personal, shopping, travel, learning, newsletters)
   - Duplicate label detection
   - Consolidation suggestions
   - `visualizeLabelHierarchy()` - Tree view of labels
