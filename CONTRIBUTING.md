@@ -3,7 +3,6 @@
 ## Reporting Issues
 
 - Search existing issues before opening a new one
-- Use the issue templates
 - **Never include personal data** (label names, email addresses, thread IDs)
 - Include sanitized Apps Script execution logs when relevant
 
