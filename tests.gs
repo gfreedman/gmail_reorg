@@ -373,6 +373,173 @@ function testTimeManagement(results)
 }
 
 // ============================================================================
+// RETRY HELPER TESTS
+// ============================================================================
+
+/**
+ * Test suite for withRetry and isTransientError.
+ * Uses tiny baseDelayMs so the suite runs in milliseconds.
+ *
+ * @param {Object} results - Results accumulator
+ */
+function testRetryHelpers(results)
+{
+  Logger.log('=== Retry Helper Tests ===');
+
+  // --- isTransientError classification ---
+
+  runTest('isTransientError detects 503', function()
+  {
+    assert(isTransientError(new Error('Service Unavailable (503)')), 'Should match 503');
+  }, results);
+
+  runTest('isTransientError detects 429 rate limit', function()
+  {
+    assert(isTransientError(new Error('429 Too Many Requests')), 'Should match 429');
+  }, results);
+
+  runTest('isTransientError detects Apps Script quota message', function()
+  {
+    assert(isTransientError(new Error('Service invoked too many times for one day')),
+           'Should match Apps Script quota');
+  }, results);
+
+  runTest('isTransientError detects timeout', function()
+  {
+    assert(isTransientError(new Error('Operation timed out')), 'Should match timed out');
+  }, results);
+
+  runTest('isTransientError rejects permanent error', function()
+  {
+    assert(!isTransientError(new Error('Label not found')), 'Should not match permanent error');
+  }, results);
+
+  runTest('isTransientError handles null/undefined', function()
+  {
+    assert(!isTransientError(null), 'Should not throw on null');
+    assert(!isTransientError(undefined), 'Should not throw on undefined');
+    assert(!isTransientError({}), 'Should not throw on plain object');
+  }, results);
+
+  // --- withRetry success paths ---
+
+  runTest('withRetry returns value when fn succeeds first try', function()
+  {
+    let calls = 0;
+    const result = withRetry(function() { calls++; return 'ok'; }, 'first-try',
+                             {baseDelayMs: 1});
+    assertEquals(result, 'ok', 'Should return fn value');
+    assertEquals(calls, 1, 'Should call fn exactly once');
+  }, results);
+
+  runTest('withRetry retries on transient then succeeds', function()
+  {
+    let calls = 0;
+    const result = withRetry(function()
+    {
+      calls++;
+      if (calls < 3) { throw new Error('503 Service Unavailable'); }
+      return 'recovered';
+    }, 'retry-then-succeed', {baseDelayMs: 1, maxAttempts: 4});
+    assertEquals(result, 'recovered', 'Should return after retries');
+    assertEquals(calls, 3, 'Should call fn three times');
+  }, results);
+
+  // --- withRetry failure paths ---
+
+  runTest('withRetry throws immediately on permanent error', function()
+  {
+    let calls = 0;
+    let threw = false;
+    try
+    {
+      withRetry(function() { calls++; throw new Error('Label not found'); },
+                'permanent', {baseDelayMs: 1, maxAttempts: 4});
+    }
+    catch (e) { threw = true; }
+    assert(threw, 'Should throw');
+    assertEquals(calls, 1, 'Should not retry permanent errors');
+  }, results);
+
+  runTest('withRetry throws after exhausting attempts on transient', function()
+  {
+    let calls = 0;
+    let threw = false;
+    try
+    {
+      withRetry(function() { calls++; throw new Error('429 rate limit'); },
+                'exhaust', {baseDelayMs: 1, maxAttempts: 3});
+    }
+    catch (e) { threw = true; }
+    assert(threw, 'Should throw after exhausting');
+    assertEquals(calls, 3, 'Should call fn maxAttempts times');
+  }, results);
+
+  // --- withRetry time-budget enforcement ---
+
+  runTest('withRetry aborts retry when budget would be exceeded', function()
+  {
+    let calls = 0;
+    let threw = false;
+    const ancientStart = new Date().getTime() - 290000;  // nearly exhausted 300s budget
+    try
+    {
+      withRetry(function() { calls++; throw new Error('503 backend error'); },
+                'budget-aware',
+                {baseDelayMs: 30000, maxAttempts: 4,  // 30s+ backoff exceeds remaining ~10s
+                 runStartTime: ancientStart, maxRuntimeMs: 300000});
+    }
+    catch (e) { threw = true; }
+    assert(threw, 'Should throw when budget exceeded');
+    assertEquals(calls, 1, 'Should not retry when delay exceeds remaining runtime');
+  }, results);
+
+  // --- withRetry telemetry ---
+
+  runTest('withRetry invokes onRetry callback with attempt and error', function()
+  {
+    const retryLog = [];
+    try
+    {
+      withRetry(function() { throw new Error('503'); },
+                'telemetry',
+                {baseDelayMs: 1, maxAttempts: 3,
+                 onRetry: function(attempt, err, delay)
+                 {
+                   retryLog.push({attempt: attempt, msg: err.message, delay: delay});
+                 }});
+    }
+    catch (e) { /* expected */ }
+    // Two retries before final failure on attempt 3
+    assertEquals(retryLog.length, 2, 'Should invoke onRetry twice (between attempts)');
+    assertEquals(retryLog[0].attempt, 1, 'First retry callback is for attempt 1');
+    assertEquals(retryLog[1].attempt, 2, 'Second retry callback is for attempt 2');
+    assert(retryLog[0].delay >= 1, 'Delay should be set');
+  }, results);
+
+  runTest('withRetry survives onRetry callback throwing', function()
+  {
+    let calls = 0;
+    let succeeded = false;
+    try
+    {
+      withRetry(function()
+      {
+        calls++;
+        if (calls < 2) { throw new Error('503'); }
+        return 'ok';
+      }, 'bad-callback',
+         {baseDelayMs: 1, maxAttempts: 3,
+          onRetry: function() { throw new Error('telemetry blew up'); }});
+      succeeded = true;
+    }
+    catch (e) { /* should not happen */ }
+    assert(succeeded, 'withRetry should not propagate onRetry errors');
+    assertEquals(calls, 2, 'fn should still be retried after onRetry throws');
+  }, results);
+}
+
+// ============================================================================
 // UTILITY FUNCTION TESTS
 // ============================================================================
 
@@ -707,6 +874,9 @@ function runAllTests()
   Logger.log('');
 
   testTimeManagement(results);
+  Logger.log('');
+
+  testRetryHelpers(results);
   Logger.log('');
 
   testUtilityFunctions(results);

@@ -27,7 +27,13 @@ const CONFIG =
   SKIP_COMPLETED: true,
 
   // Whether to show detailed progress logs
-  VERBOSE: true
+  VERBOSE: true,
+
+  // Maximum retry attempts for transient errors (503, 429, timeouts) per batch
+  MAX_RETRIES: 4,
+
+  // Initial backoff between retries (ms). Doubles each attempt: 1s, 2s, 4s, 8s + jitter
+  RETRY_BASE_DELAY_MS: 1000
 };
 
 // ============================================================================
@@ -149,6 +155,7 @@ function createBatchStats()
     labelsCreated: 0,
     threadsMigrated: 0,
     migrationsCompleted: 0,
+    retries: 0,
     errors: [],
     startTime: new Date().getTime()
   };
@@ -427,10 +434,10 @@ function migrateSingleLabel(fromLabelName, toLabelName, batchStats)
       }
 
       // Apply new label in batches
-      applyLabelToThreads(threads, toLabel);
+      applyLabelToThreads(threads, toLabel, batchStats);
 
       // Remove old label in batches
-      removeOldLabel(threads, fromLabel);
+      removeOldLabel(threads, fromLabel, batchStats);
 
       result.success = true;
       result.threadCount = threads.length;
@@ -461,12 +468,15 @@ function migrateSingleLabel(fromLabelName, toLabelName, batchStats)
  * @param {GmailThread[]} threads - Threads to label
  * @param {GmailLabel} label - Label to apply
  */
-function applyLabelToThreads(threads, label)
+function applyLabelToThreads(threads, label, batchStats)
 {
   for (let i = 0; i < threads.length; i += CONFIG.BATCH_SIZE)
   {
     const batch = threads.slice(i, Math.min(i + CONFIG.BATCH_SIZE, threads.length));
-    label.addToThreads(batch);
+    withRetry(
+      function() { label.addToThreads(batch); },
+      'addToThreads batch starting at ' + i,
+      buildRetryOpts(batchStats));
 
     if (CONFIG.VERBOSE && threads.length > CONFIG.BATCH_SIZE)
     {
@@ -481,18 +491,37 @@ function applyLabelToThreads(threads, label)
  * @param {GmailThread[]} threads - Threads to unlabel
  * @param {GmailLabel} label - Label to remove
  */
-function removeOldLabel(threads, label)
+function removeOldLabel(threads, label, batchStats)
 {
   for (let i = 0; i < threads.length; i += CONFIG.BATCH_SIZE)
   {
     const batch = threads.slice(i, Math.min(i + CONFIG.BATCH_SIZE, threads.length));
-    label.removeFromThreads(batch);
+    withRetry(
+      function() { label.removeFromThreads(batch); },
+      'removeFromThreads batch starting at ' + i,
+      buildRetryOpts(batchStats));
 
     if (CONFIG.VERBOSE && threads.length > CONFIG.BATCH_SIZE)
     {
       log('    Removed label from ' + Math.min(i + CONFIG.BATCH_SIZE, threads.length) + '/' + threads.length + ' threads');
     }
   }
+}
+
+/**
+ * Build retry options bound to the current batchStats and CONFIG.
+ * Centralizes the wiring so callers don't repeat the same opts block.
+ *
+ * @param {Object} batchStats - Running stats; may be omitted in tests/standalone calls
+ * @return {Object} opts object for withRetry()
+ */
+function buildRetryOpts(batchStats)
+{
+  return {
+    runStartTime: batchStats && batchStats.startTime,
+    maxRuntimeMs: CONFIG.MAX_RUNTIME_MS,
+    onRetry: batchStats ? function() { batchStats.retries++; } : undefined
+  };
 }
 
 /**
@@ -512,6 +541,7 @@ function showBatchSummary(batchStats)
   Logger.log('Labels created: ' + batchStats.labelsCreated);
   Logger.log('Migrations completed: ' + batchStats.migrationsCompleted);
   Logger.log('Threads migrated: ' + batchStats.threadsMigrated);
+  Logger.log('Transient errors retried: ' + (batchStats.retries || 0));
 
   if (batchStats.errors.length > 0)
   {

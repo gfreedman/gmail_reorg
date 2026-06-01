@@ -200,7 +200,7 @@ newLabels: [
 
 **"Exceeded maximum execution time"** — Normal for large mailboxes. Run `main()` again and it will resume automatically.
 
-**"Service invoked too many times"** — Gmail rate limit. Wait a few minutes, then try again. Reducing `BATCH_SIZE` helps if it keeps happening.
+**"Service invoked too many times"** — Gmail rate limit. The library auto-retries transient errors (503/500/429/rate-limit/timeout) with exponential backoff up to `CONFIG.MAX_RETRIES` times per batch, and aborts a retry if the backoff would exceed the runtime budget. If a batch still exhausts retries, the failed migration isn't marked complete — re-running `main()` will retry it. Reducing `BATCH_SIZE` helps if it keeps happening. The batch summary reports `Transient errors retried: N` so you can see how busy the retry path was.
 
 **"Label not found"** — The source label doesn't exist or the name is slightly off. Run `listAllLabelsDetailed()` to see exact names.
 

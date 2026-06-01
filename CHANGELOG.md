@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Transient-error retry helper** (`withRetry`, `isTransientError` in `utils.gs`)
+  - Exponential backoff with jitter for 503/500/429/rate-limit/timeout errors
+  - Time-budget aware: aborts a retry instead of pushing past `MAX_RUNTIME_MS`
+  - `onRetry` callback hook for telemetry; isolates callback failures from request flow
+  - New `CONFIG.MAX_RETRIES` (default 4) and `CONFIG.RETRY_BASE_DELAY_MS` (default 1000) knobs
+- **Retry telemetry** surfaced in batch summary as `Transient errors retried: N`
+- Test suite `testRetryHelpers` in `tests.gs` covering classification, success/failure paths, budget enforcement, and telemetry
+
+### Changed
+- `applyLabelToThreads` and `removeOldLabel` now accept `batchStats` and route through `withRetry`
+- `createBatchStats()` includes a `retries` counter
+
 ### Planned
 - Google Sheets UI for configuration
 - Scheduled migrations via triggers

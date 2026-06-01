@@ -233,6 +233,105 @@ function formatTimestamp()
 }
 
 // ============================================================================
+// RETRY HELPERS
+// ============================================================================
+
+/**
+ * Execute a function with retry on transient errors.
+ * Exponential backoff with jitter: baseDelay, 2x, 4x, 8x... plus 0-500ms jitter.
+ * Non-transient errors throw immediately; final transient error after exhausted
+ * attempts also throws.
+ *
+ * When opts.runStartTime and opts.maxRuntimeMs are provided, the helper aborts
+ * a retry (re-throws) if the next backoff would push past the runtime budget.
+ * This prevents retries from silently eating the Apps Script execution buffer.
+ *
+ * @param {Function} fn - The operation to execute. May be called multiple times.
+ * @param {string} description - Human-readable description for log messages.
+ * @param {Object} [opts] - Optional configuration.
+ * @param {number} [opts.maxAttempts] - Max attempts (default: CONFIG.MAX_RETRIES or 4).
+ * @param {number} [opts.baseDelayMs] - Initial backoff delay (default: CONFIG.RETRY_BASE_DELAY_MS or 1000).
+ * @param {number} [opts.runStartTime] - Run start timestamp (ms) for budget enforcement.
+ * @param {number} [opts.maxRuntimeMs] - Run budget (ms) for budget enforcement.
+ * @param {Function} [opts.onRetry] - Callback(attempt, error, delayMs) invoked before each backoff sleep.
+ * @return {*} Return value of fn on success.
+ */
+function withRetry(fn, description, opts)
+{
+  opts = opts || {};
+  const maxAttempts = opts.maxAttempts || (typeof CONFIG !== 'undefined' && CONFIG.MAX_RETRIES) || 4;
+  const baseDelayMs = opts.baseDelayMs || (typeof CONFIG !== 'undefined' && CONFIG.RETRY_BASE_DELAY_MS) || 1000;
+  const runStartTime = opts.runStartTime;
+  const maxRuntimeMs = opts.maxRuntimeMs;
+  const onRetry = opts.onRetry;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++)
+  {
+    try
+    {
+      return fn();
+    }
+    catch (e)
+    {
+      if (!isTransientError(e) || attempt === maxAttempts)
+      {
+        throw e;
+      }
+
+      const delay = baseDelayMs * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 500);
+
+      if (runStartTime && maxRuntimeMs)
+      {
+        const elapsed = new Date().getTime() - runStartTime;
+        const remaining = maxRuntimeMs - elapsed;
+        if (delay >= remaining)
+        {
+          logWarning('Aborting retry of ' + description +
+                     ': backoff (' + delay + 'ms) exceeds remaining runtime (' + remaining + 'ms). ' +
+                     'Re-run main() to continue.');
+          throw e;
+        }
+      }
+
+      logWarning('Transient error during ' + description +
+                 ' (attempt ' + attempt + '/' + maxAttempts + '): ' +
+                 e.message + '. Retrying in ' + delay + 'ms');
+
+      if (onRetry)
+      {
+        try { onRetry(attempt, e, delay); } catch (_) { /* never let telemetry break flow */ }
+      }
+
+      Utilities.sleep(delay);
+    }
+  }
+
+  // Defensive: loop body either returns or throws on every iteration. This is unreachable.
+  throw new Error('withRetry: exhausted attempts without resolving — internal invariant violated');
+}
+
+/**
+ * Detect whether an error is transient (worth retrying) versus permanent.
+ * Matches common Gmail/Apps Script API failure signatures.
+ *
+ * @param {Error|Object} e - The thrown error.
+ * @return {boolean} True if the error is retryable.
+ */
+function isTransientError(e)
+{
+  const msg = ((e && e.message) || '').toLowerCase();
+  return msg.indexOf('503') !== -1 ||
+         msg.indexOf('500') !== -1 ||
+         msg.indexOf('429') !== -1 ||
+         msg.indexOf('service invoked too many times') !== -1 ||
+         msg.indexOf('rate limit') !== -1 ||
+         msg.indexOf('backend error') !== -1 ||
+         msg.indexOf('temporarily unavailable') !== -1 ||
+         msg.indexOf('timed out') !== -1 ||
+         msg.indexOf('timeout') !== -1;
+}
+
+// ============================================================================
 // STATE PERSISTENCE
 // ============================================================================
 
