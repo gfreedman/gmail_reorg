@@ -147,7 +147,9 @@ const ORGANIZATION_PLAN =
  * Create a fresh batch stats object to avoid global state pollution.
  * Called at the start of each main() run.
  *
- * @return {Object} New batch stats object
+ * @return {Object} Stats accumulator with fields:
+ *   labelsCreated, threadsMigrated, migrationsCompleted, retries (count of
+ *   transient errors retried via withRetry), errors (array), startTime (ms epoch)
  */
 function createBatchStats()
 {
@@ -463,10 +465,13 @@ function migrateSingleLabel(fromLabelName, toLabelName, batchStats)
 
 /**
  * Apply a label to threads in batches.
- * Batching prevents API quota exhaustion.
+ * Batching prevents API quota exhaustion; each batch call is wrapped in
+ * withRetry() for transient-error resilience.
  *
  * @param {GmailThread[]} threads - Threads to label
  * @param {GmailLabel} label - Label to apply
+ * @param {Object} [batchStats] - Optional running stats; when provided, enables
+ *   time-budget-aware retries and retry-count telemetry via buildRetryOpts()
  */
 function applyLabelToThreads(threads, label, batchStats)
 {
@@ -487,9 +492,12 @@ function applyLabelToThreads(threads, label, batchStats)
 
 /**
  * Remove a label from threads in batches.
+ * Each batch call is wrapped in withRetry() for transient-error resilience.
  *
  * @param {GmailThread[]} threads - Threads to unlabel
  * @param {GmailLabel} label - Label to remove
+ * @param {Object} [batchStats] - Optional running stats; when provided, enables
+ *   time-budget-aware retries and retry-count telemetry via buildRetryOpts()
  */
 function removeOldLabel(threads, label, batchStats)
 {
