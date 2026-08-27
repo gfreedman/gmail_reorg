@@ -273,7 +273,11 @@ function displayEmptyLabels(labelData)
 function displayPotentialDuplicates(labelData)
 {
   const duplicates = [];
-  const seen = {};
+  // Null-prototype map: the keys below come from message headers or label names,
+  // which are outside our control. On a plain object a key of __proto__ or
+  // constructor resolves to something on Object.prototype instead of a own
+  // property, silently corrupting the tally.
+  const seen = Object.create(null);
 
   // Normalize names by removing non-alphanumeric chars
   for (let i = 0; i < labelData.length; i++)
@@ -382,7 +386,11 @@ function suggestConsolidations(labelData)
 function displayCategoryAnalysis(labelData)
 {
   // Group labels by detected category
-  const categories = {};
+  // Null-prototype map: the keys below come from message headers or label names,
+  // which are outside our control. On a plain object a key of __proto__ or
+  // constructor resolves to something on Object.prototype instead of a own
+  // property, silently corrupting the tally.
+  const categories = Object.create(null);
 
   for (let i = 0; i < labelData.length; i++)
   {

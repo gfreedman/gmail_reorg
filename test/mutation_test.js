@@ -17,6 +17,10 @@ const R = path.join(__dirname, '..') + path.sep;
 
 // Mutations: [name, find, replace, testNamesExpectedToFail]
 const MUTATIONS = [
+  ['conflict map keys lose their prefix',
+   "conflicts['dup|' + A.addr] =",
+   "conflicts[A.addr] =",
+   ['not confused by prototype-shaped criteria']],
   ['trigger install stacks duplicates',
    "const removed = _removeMaintenanceTriggers_(app);",
    "const removed = 0;",

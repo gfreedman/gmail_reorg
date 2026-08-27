@@ -211,6 +211,35 @@ function testFilterSpec(results)
     assertEquals(_specConflicts_(spec).length, 0, 'Different lists should not conflict');
   }, results);
 
+  // --- hostile input ---
+  // Sender addresses come from message headers, so they are attacker-chosen.
+
+  runTest('_specAddresses_ handles prototype-shaped criteria without throwing', function()
+  {
+    assertDeepEquals(_specAddresses_({from: '__proto__'}), ['__proto__'],
+      'A prototype-shaped address is data, not a key');
+    assertDeepEquals(_specAddresses_({from: 'constructor@x.com'}), ['constructor@x.com'],
+      'Should be returned verbatim');
+  }, results);
+
+  runTest('_specConflicts_ is not confused by prototype-shaped criteria', function()
+  {
+    // The conflict map keys are prefixed ("dup|", "sub|"), so a criterion of
+    // __proto__ can never land on Object.prototype. This pins that property.
+    const spec = [
+      {from: '__proto__', label: 'Reading', skipInbox: true},
+      {from: '__proto__', label: 'Misc', skipInbox: true}
+    ];
+    assertEquals(_specConflicts_(spec).length, 1,
+      'Duplicate detection must still work for a prototype-shaped key');
+  }, results);
+
+  runTest('_filterSig_ keeps prototype-shaped criteria distinct', function()
+  {
+    assert(_filterSig_('__proto__', null) !== _filterSig_(null, '__proto__'),
+      'Signatures must stay distinct regardless of the text');
+  }, results);
+
   // --- classification: what rebuildFilters_ is allowed to overwrite ---
 
   runTest('_classifyFilter_ recognises an exact match', function()

@@ -575,7 +575,11 @@ function diagnoseOrphans_(out)
   const sample = GmailApp.search('has:nouserlabels -in:trash -in:spam', 0, _PAGE_SIZE);
   const sample2 = GmailApp.search('has:nouserlabels -in:trash -in:spam', _PAGE_SIZE, _PAGE_SIZE);
   const all = sample.concat(sample2);
-  const counts = {};
+  // Null-prototype map: the keys below come from message headers or label names,
+  // which are outside our control. On a plain object a key of __proto__ or
+  // constructor resolves to something on Object.prototype instead of a own
+  // property, silently corrupting the tally.
+  const counts = Object.create(null);
   all.forEach(function(t)
   {
     try
@@ -870,7 +874,11 @@ function inspectSenders_(out, domain)
     ' (sampled ' + MAX_SAMPLE + ' most recent) ===');
   const query = (domain && domain !== 'all' ? 'from:' + domain + ' ' : '') + 'has:nouserlabels -in:trash -in:spam -in:sent';
   const MAX_SAMPLE = 250;
-  const counts = {};
+  // Null-prototype map: the keys below come from message headers or label names,
+  // which are outside our control. On a plain object a key of __proto__ or
+  // constructor resolves to something on Object.prototype instead of a own
+  // property, silently corrupting the tally.
+  const counts = Object.create(null);
   let total = 0;
   const startTime = new Date().getTime();
   const resp = Gmail.Users.Messages.list('me',
@@ -951,7 +959,11 @@ function inspectCategory_(out, cat)
     offset += _PAGE_SIZE;
   }
   out.push('Total threads: ' + all.length);
-  const counts = {};
+  // Null-prototype map: the keys below come from message headers or label names,
+  // which are outside our control. On a plain object a key of __proto__ or
+  // constructor resolves to something on Object.prototype instead of a own
+  // property, silently corrupting the tally.
+  const counts = Object.create(null);
   all.forEach(function(t)
   {
     try
@@ -1429,7 +1441,11 @@ function passF_(out, apply)
   }
 
   const allRules = [].concat(_MISC_TO, _PASS_F_RULES, _PASS_B_RULES, _PASS_C_LABEL_RULES, _PASS_D_LABEL_RULES);
-  const dstCache = {};
+  // Null-prototype map: the keys below come from message headers or label names,
+  // which are outside our control. On a plain object a key of __proto__ or
+  // constructor resolves to something on Object.prototype instead of a own
+  // property, silently corrupting the tally.
+  const dstCache = Object.create(null);
   const getDst = function(name)
   {
     if (dstCache[name] === undefined) dstCache[name] = GmailApp.getUserLabelByName(name) || null;
@@ -1565,7 +1581,11 @@ function passInbox_(out, apply)
   out.push('---');
 
   const allRules = [].concat(_MISC_TO, _PASS_F_RULES, _PASS_B_RULES, _PASS_C_LABEL_RULES, _PASS_D_LABEL_RULES);
-  const dstCache = {};
+  // Null-prototype map: the keys below come from message headers or label names,
+  // which are outside our control. On a plain object a key of __proto__ or
+  // constructor resolves to something on Object.prototype instead of a own
+  // property, silently corrupting the tally.
+  const dstCache = Object.create(null);
   const getDst = function(name)
   {
     if (dstCache[name] === undefined) dstCache[name] = GmailApp.getUserLabelByName(name) || null;
@@ -1933,13 +1953,21 @@ function miscExtract_(out, apply)
   }
   out.push('Misc threads to scan: ' + all.length);
 
-  const dstCache = {};
+  // Null-prototype map: the keys below come from message headers or label names,
+  // which are outside our control. On a plain object a key of __proto__ or
+  // constructor resolves to something on Object.prototype instead of a own
+  // property, silently corrupting the tally.
+  const dstCache = Object.create(null);
   const getDst = function(n)
   {
     if (dstCache[n] === undefined) dstCache[n] = GmailApp.getUserLabelByName(n) || null;
     return dstCache[n];
   };
-  const counts = {};
+  // Null-prototype map: the keys below come from message headers or label names,
+  // which are outside our control. On a plain object a key of __proto__ or
+  // constructor resolves to something on Object.prototype instead of a own
+  // property, silently corrupting the tally.
+  const counts = Object.create(null);
   let moved = 0,
     trashed = 0;
 

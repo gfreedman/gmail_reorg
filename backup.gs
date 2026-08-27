@@ -65,7 +65,11 @@ function createBackup()
   sheet.setFrozenRows(1);
 
   const labels = GmailApp.getUserLabels();
-  const processedThreadIds = {};  // Track processed threads to avoid duplicates
+  // Null-prototype map: the keys below come from message headers or label names,
+  // which are outside our control. On a plain object a key of __proto__ or
+  // constructor resolves to something on Object.prototype instead of a own
+  // property, silently corrupting the tally.
+  const processedThreadIds = Object.create(null);  // Track processed threads to avoid duplicates
   let row = 2;
   let skippedCount = 0;
 
