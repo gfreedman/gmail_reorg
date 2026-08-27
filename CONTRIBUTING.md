@@ -14,8 +14,8 @@
    - `runAllTests()` from the Apps Script editor, or `?fn=selftest` on a deployment
    - `node test/mutation_test.js` from a clone — this is what CI enforces
 4. If you touch a guard (an early return, a permission check, a dry-run branch),
-   add a mutation for it. A `SURVIVED` line means that guard is not really
-   covered, and the build fails on it
+   add a mutation for it. A `SURVIVED` line means nothing covers that guard,
+   and the build fails on it
 5. Submit a Pull Request with a description of what, why, and how it was tested
 
 ## Code Style

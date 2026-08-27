@@ -2,17 +2,13 @@
 
 ## Two layers, two risk profiles
 
-This repository contains two things, and they differ enough that lumping them
-together would misrepresent both.
-
 **The library** (`utils.gs`, `backup.gs`, `analysis.gs`, `reorganization.gs`) is
 what the [front page](https://gfreedman.github.io/gmail_reorg/) documents. It runs
 from the Apps Script editor, changes labels only, and never deletes a message.
 
-**The toolkit** (`reorg_toolkit.gs`, `admin.gs`) is an ad-hoc maintenance layer
-deployed as a Web App and driven over HTTP. It can trash mail. It is published
-here because the logic is worth reading, not because it is meant to be dropped
-into someone else's account unexamined.
+**The toolkit** (`reorg_toolkit.gs`, `admin.gs`) is a maintenance layer deployed
+as a Web App and driven over HTTP. It can trash mail. Read it before running it
+against your own account.
 
 ## What the library can and cannot do
 
@@ -80,9 +76,8 @@ Processing happens inside your Google account. Backups are Sheets created in you
 own Drive, private to you; nothing is shared automatically. No analytics, no
 telemetry, no external API calls.
 
-Note that `createBackup` writes every subject and sender to a Sheet. That is a
-standing copy of your mailbox metadata living outside Gmail — worth deleting when
-you no longer need it.
+`createBackup` writes every subject and sender to a Sheet. That is a standing
+copy of your mailbox metadata outside Gmail; delete it when you are done with it.
 
 Configuration containing personal data (sender rules, label names, thread ids)
 lives in `_private_data.gs`, which is git-ignored and has never been committed.

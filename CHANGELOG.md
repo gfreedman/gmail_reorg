@@ -23,11 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `test/mutation_test.js` — mutation runner that breaks one guard at a time and asserts a test catches it
 - `?fn=selftest` route to run the whole suite over HTTP
 - `.claspignore` to keep `test/` out of the Apps Script push
-- **Web App authentication** — every route requires a shared secret held in the `WEBAPP_TOKEN` Script Property. Fails closed: with no token configured every route is refused rather than left open. Constant-time comparison; denials return a bare `DENIED` that echoes neither route nor reason
-- **`admin.gs`** — the functions you run by hand (`setWebAppToken`, `authorize`, `installMaintenanceTrigger`, `removeMaintenanceTrigger`), separated out because the Apps Script Run menu only lists functions from the selected file
-- **Scheduled maintenance** — `runMaintenance` labels inbox threads carrying no plan label, on a daily time-based trigger. Runs inside the project, so it needs no token and no machine awake. Labels only; never archives or trashes. Installing the trigger twice replaces rather than stacks
-- **`SECURITY.md`** describing the two layers, the token model, rotation, and what the toolkit can reach
-- CI (`.github/workflows/tests.yml`) running the unit and mutation suites on push and pull request
+- **Web App authentication** - every route requires a shared secret in the `WEBAPP_TOKEN` Script Property. Fails closed: with no token set, every route is refused. Constant-time comparison, and denials return a bare `DENIED`
+- **`admin.gs`** - the hand-run functions (`setWebAppToken`, `authorize`, `installMaintenanceTrigger`, `removeMaintenanceTrigger`), split out because the Run menu only lists the selected file
+- **Scheduled maintenance** - `runMaintenance` labels inbox threads carrying no plan label, on a daily trigger. Runs inside the project, so it needs no token and no machine left awake. Labels only. Installing twice replaces the trigger
+- **`SECURITY.md`** - the two layers, the token model, rotation, and what the toolkit can reach
+- **CI** - `.github/workflows/tests.yml` runs the unit and mutation suites on push and pull request
 
 ### Changed
 - `applyLabelToThreads` and `removeOldLabel` now accept `batchStats` and route through `withRetry`
@@ -37,11 +37,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Repeated literals replaced with named constants (`_PAGE_SIZE`, `_DRAIN_MAX_PASSES`, the runtime budgets). `MAX_RUNTIME` had been declared 10 times at three different values while `CONFIG.MAX_RUNTIME_MS` already existed
 
 ### Fixed
-- **`backup_` silently reported success after a failed read.** A swallowed exception left the thread list empty, which is indistinguishable from a label that genuinely has no threads, and the run still printed `BACKUP COMPLETE`. Failed labels are now marked `READ FAILED` and the run refuses to claim success
-- **`_safeCall` made the retry knobs inert.** It passed hardcoded values to `withRetry`, so `CONFIG.MAX_RETRIES` and `CONFIG.RETRY_BASE_DELAY_MS` had no effect on any toolkit route
-- **Web App tokens were minted with `Math.random()`**, a non-cryptographic PRNG whose state is recoverable from its outputs. Now built from `Utilities.getUuid()`, which is `SecureRandom`-backed
-- **Maps keyed on message headers used plain object literals.** A sender whose domain is `__proto__` corrupted the tally; twelve such maps now use `Object.create(null)`
-- Stack traces are no longer returned to Web App callers; they go to the execution log
+- **Silent backup failure** - a swallowed exception left the thread list empty, which reads the same as a label with no threads, and the run still printed `BACKUP COMPLETE`. Failed labels are now marked `READ FAILED` and the run reports itself incomplete
+- **Inert retry settings** - `_safeCall` passed hardcoded values to `withRetry`, so `CONFIG.MAX_RETRIES` and `CONFIG.RETRY_BASE_DELAY_MS` had no effect on any toolkit route
+- **Weak token generation** - Web App tokens came from `Math.random()`, whose state is recoverable from its outputs. Now built from `Utilities.getUuid()`, backed by `SecureRandom`
+- **Prototype pollution in tallies** - a sender whose domain is `__proto__` corrupted counts keyed on message headers. Twelve such maps now use `Object.create(null)`
+- **Stack traces in HTTP responses** - these now go to the execution log instead
 
 ### Planned
 - Google Sheets UI for configuration

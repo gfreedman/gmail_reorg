@@ -26,15 +26,14 @@ Go to File > New > Script and create these files. Paste the contents from this r
 
 `utils.gs` must be the first file listed in your project.
 
-`reorg_toolkit.gs` is a separate, more ad-hoc layer: a `doGet` router exposing
-one-off maintenance routes over HTTP. It reads its configuration — sender rules,
-label names, thread IDs — from a `_private_data.gs` file that is **not** in this
-repo, because it holds personal data. Without that file the toolkit will raise a
-`ReferenceError` naming the missing constant, which is deliberate: an absent
-configuration must stop the run rather than silently do nothing. The rest of the
-library works without it.
+`reorg_toolkit.gs` is a separate layer: a `doGet` router exposing one-off
+maintenance routes over HTTP. Its configuration lives in `_private_data.gs`,
+which holds personal sender rules and label names and so is not in this repo.
+Without that file the toolkit raises a `ReferenceError` naming the missing
+constant, so an absent configuration stops the run instead of quietly doing
+nothing. The rest of the library works without it.
 
-See [Toolkit setup](#toolkit-setup-optional) if you intend to deploy it, and
+See [Toolkit setup](#toolkit-setup-optional) to deploy it, and
 [SECURITY.md](SECURITY.md) for what it can reach.
 
 ### 3. Authorize
@@ -165,54 +164,44 @@ showProgress();
 Skip this unless you are deploying `reorg_toolkit.gs` as a Web App. The library
 does not need any of it.
 
-The toolkit runs behind a shared secret, and **fails closed** — until you mint a
-token, every route returns `DENIED`. Both setup functions live in `admin.gs`,
-kept out of the 3,000-line toolkit so they are easy to find in the editor's Run
-menu.
+The toolkit runs behind a shared secret and fails closed: until you mint a token,
+every route returns `DENIED`. Both setup functions live in `admin.gs`.
 
-**1. Mint a token.** Select `admin.gs`, run `setWebAppToken()`, and keep what it
-returns. It is shown once.
+**1. Mint a token.** Select `admin.gs` in the editor, run `setWebAppToken()`, and
+keep what it returns. It is shown once.
 
 ```
 https://script.google.com/macros/s/<deployment>/exec?fn=counts&token=<token>
 ```
 
-Every route needs `&token=`. Every mutating route is a dry run until you add
-`&apply=1`. Rotating is the same function again — the old token dies instantly.
+Every route needs `&token=`. Mutating routes stay dry runs until you add
+`&apply=1`. To rotate, run the same function again; the old token stops working
+immediately.
 
 **2. Schedule the upkeep.** Run `installMaintenanceTrigger()` once. It installs a
-daily trigger that labels any inbox thread carrying no plan label, running
-*inside* the project rather than over HTTP, so it needs no token and no machine
-awake. It labels only; it never archives or trashes. Running it twice replaces
-the trigger rather than stacking a second one.
+daily trigger that labels inbox threads carrying no plan label. The trigger runs
+inside the project rather than over HTTP, so it needs no token and no machine
+left awake. It labels only, never archiving or trashing, and running it a second
+time replaces the trigger instead of adding another.
 
 `removeMaintenanceTrigger()` undoes it.
 
 > The Apps Script editor does not refresh after a `clasp push`. If a file or
-> function appears to be missing, hard-reload the tab before believing it.
+> function looks missing, hard-reload the tab.
 
 ## Tests
 
-```
-node test/mutation_test.js    # from a clone; no Apps Script needed
-```
+| How | Where |
+|-----|-------|
+| `runAllTests()` | Apps Script editor; results in the log |
+| `?fn=selftest` | Deployed Web App; returns a pass/fail summary |
+| `node test/mutation_test.js` | A clone; no Apps Script needed |
 
-`tests.gs` holds the suite. Two ways to run it:
-
-| How | What it covers |
-|-----|----------------|
-| `runAllTests()` from the Apps Script editor | Everything; results go to the log |
-| `?fn=selftest` on the deployed Web App | Everything; returns a pass/fail summary |
-| `node test/mutation_test.js` | Breaks one guard at a time and checks a test catches it |
-
-The mutation runner is the one worth knowing about. A green suite only means
-something if it fails when the code breaks, so it deliberately introduces a
-defect into each guard in turn and asserts the expected test fails. A `SURVIVED`
-line means that guard is not really covered. Run it after touching any guard.
-
-It loads the `.gs` files into a sandboxed scope with the Apps Script globals
-stubbed, so it never touches Gmail, and it stubs the private configuration too —
-so it runs from a clean clone.
+The first two run the suite in `tests.gs`. The third also disables each safety
+check in turn to confirm a test catches it, and prints `SURVIVED` for any guard
+that nothing covers. Run it after touching a guard. It loads the `.gs` files into
+a sandboxed scope with the Apps Script globals stubbed, so it never reaches
+Gmail, and it stubs the private configuration too.
 
 ## Configuration
 
@@ -277,36 +266,30 @@ newLabels: [
 
 ## Design notes
 
-A few decisions that shaped the code, and the reasoning behind them.
+**Dry runs by default.** Every mutating operation reports what it would do and
+needs an explicit flag to act. Runs are idempotent and checkpointed, so hitting
+the 6-minute limit mid-migration is not a problem: run it again.
 
-**Nothing moves until you say so.** Every mutating operation is a dry run by
-default and needs an explicit flag to act. Runs are idempotent and checkpointed,
-so an operation interrupted by the 6-minute limit is safe to re-run rather than
-something you have to reason about.
-
-**Gmail owns filing, not a mail client.** An earlier version of this setup relied
-on client-side rules in a desktop mail app. They only run while that machine is
-awake, so filing silently stopped whenever the laptop was closed and resumed
-later — producing labels that looked maintained but had gaps. Filing that depends
-on a particular computer being open is not filing. Delivery-time filters run in
-Gmail whether anything else is on or not.
+**Filing belongs in Gmail, not a mail client.** An earlier version of this setup
+used client-side rules in a desktop mail app. Those only run while that machine
+is awake, so filing stopped whenever the laptop closed and resumed days later,
+leaving labels that looked maintained but had gaps in them. Delivery-time filters
+in Gmail run regardless of what else is on.
 
 **Archive on arrival only when no human wrote to you.** Newsletters and
-notifications are filed and hidden; anything a person typed is filed and left
-visible. The asymmetry is deliberate — burying a message from a person is
-expensive and burying a newsletter is not, so the rule optimises for the costly
-error rather than treating all mail alike.
+notifications are filed and hidden. Anything a person typed is filed and left in
+the inbox. Burying a message from a person costs far more than leaving a
+newsletter visible, so the rule is asymmetric.
 
 **Logic is committed, configuration is not.** Sender rules, label names and
-thread ids live in a git-ignored file; the code that consumes them is in the
-repo. That keeps the logic reviewable without personal data ever entering git,
-and a missing configuration raises immediately rather than degrading into a run
-that does nothing and reports success.
+thread ids live in a git-ignored file; the code that reads them is in the repo.
+Personal data never enters git, and a missing configuration raises straight away
+instead of producing a run that does nothing and reports success.
 
-**Guards are mutation-tested.** A passing test suite means nothing unless it
-fails when the code breaks, so `test/mutation_test.js` disables each safety check
-in turn and confirms a test catches it. Two guards were found to be untested that
-way, including one that was never wired in.
+**Guards are mutation-tested.** A passing suite proves nothing unless it fails
+when the code breaks, so `test/mutation_test.js` disables each safety check in
+turn and confirms a test catches it. This caught two guards with no real
+coverage, one of which was never wired in.
 
 ## Limitations
 
