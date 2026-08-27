@@ -1289,20 +1289,60 @@ function authorize() {
 
 
 
-function mergeDrift_(out, apply) {
+// ---------------------------------------------------------------------------
+// Gmail gateway — the ONLY place the mutating routes touch Gmail.
+//
+// Every mutating function takes an optional `deps` argument; tests pass a fake
+// gateway plus fixture config so the real code paths run without touching the
+// mailbox. Production callers omit it and get _GW below.
+// ---------------------------------------------------------------------------
+const _GW = {
+  listLabels: function () { return Gmail.Users.Labels.list('me').labels || []; },
+  getLabel: function (name) { return GmailApp.getUserLabelByName(name); },
+  deleteLabel: function (label) { return GmailApp.deleteLabel(label); },
+  search: function (q, start, max) { return GmailApp.search(q, start, max); },
+  listFilters: function () { return Gmail.Users.Settings.Filters.list('me').filter || []; },
+  createFilter: function (resource) { return Gmail.Users.Settings.Filters.create(resource, 'me'); },
+  removeFilter: function (id) { return Gmail.Users.Settings.Filters.remove('me', id); }
+};
+
+// Resolve one injected dependency.
+//
+// Deliberately NOT `deps.x || fallback`: an empty string or 0 is a valid config
+// value, and `||` would silently swap it for production data. Tests would then
+// pass while exercising the real spec instead of their fixture.
+function _dep_(deps, key, fallback) {
+  return (deps && deps[key] !== undefined) ? deps[key] : fallback;
+}
+
+// Resolve the Gmail gateway.
+//
+// If a caller supplies `deps` at all it is a test, so a missing or misspelled
+// `gw` key must fail loudly rather than fall through to _GW and mutate the real
+// mailbox. Silence here would be the most expensive bug in this file.
+function _depGw_(deps) {
+  if (!deps) { return _GW; }
+  if (!deps.gw) { throw new Error('deps supplied without a gw gateway — refusing to fall back to live Gmail'); }
+  return deps.gw;
+}
+
+function mergeDrift_(out, apply, deps) {
+  const gw = _depGw_(deps);
+  const merges = _dep_(deps, 'merges', typeof _DRIFT_MERGES === 'undefined' ? [] : _DRIFT_MERGES);
+  const shells = _dep_(deps, 'shells', typeof _DRIFT_SHELLS === 'undefined' ? [] : _DRIFT_SHELLS);
   const startTime = new Date().getTime();
   const MAX_RUNTIME = 300000;
   out.push((apply ? 'APPLY' : 'DRY-RUN') + ' Merge Apple Mail drift labels into the plan');
   out.push('---');
 
   let moved = 0;
-  for (let i = 0; i < _DRIFT_MERGES.length; i++) {
+  for (let i = 0; i < merges.length; i++) {
     if (new Date().getTime() - startTime > MAX_RUNTIME) { out.push('TIME BUDGET HIT — re-run to resume'); break; }
-    const srcName = _DRIFT_MERGES[i].src;
-    const dstName = _DRIFT_MERGES[i].dst;
-    const src = GmailApp.getUserLabelByName(srcName);
+    const srcName = merges[i].src;
+    const dstName = merges[i].dst;
+    const src = gw.getLabel(srcName);
     if (!src) { out.push('skip (already gone): ' + srcName); continue; }
-    const dst = GmailApp.getUserLabelByName(dstName);
+    const dst = gw.getLabel(dstName);
     if (!dst) { out.push('SKIP ' + srcName + ' — destination missing: ' + dstName); continue; }
 
     let movedHere = 0, safety = 0;
@@ -1320,7 +1360,7 @@ function mergeDrift_(out, apply) {
       out.push('MOVED ' + movedHere + ' from ' + srcName + ' -> ' + dstName);
       const remaining = src.getThreads(0, 1);
       if (remaining.length === 0) {
-        _safeCall(function () { GmailApp.deleteLabel(src); return null; }, 'deleteLabel ' + srcName, out);
+        _safeCall(function () { gw.deleteLabel(src); return null; }, 'deleteLabel ' + srcName, out);
         out.push('deleted empty label: ' + srcName);
       } else {
         out.push('NOT deleting ' + srcName + ' — still has threads');
@@ -1329,13 +1369,13 @@ function mergeDrift_(out, apply) {
   }
 
   out.push('--- childless parents ---');
-  for (let j = 0; j < _DRIFT_SHELLS.length; j++) {
-    const name = _DRIFT_SHELLS[j];
-    const label = GmailApp.getUserLabelByName(name);
+  for (let j = 0; j < shells.length; j++) {
+    const name = shells[j];
+    const label = gw.getLabel(name);
     if (!label) { out.push('skip (already gone): ' + name); continue; }
     if (label.getThreads(0, 1).length > 0) { out.push('NOT deleting ' + name + ' — still has threads'); continue; }
     if (!apply) { out.push('WOULD DELETE empty: ' + name); continue; }
-    _safeCall(function () { GmailApp.deleteLabel(label); return null; }, 'deleteLabel ' + name, out);
+    _safeCall(function () { gw.deleteLabel(label); return null; }, 'deleteLabel ' + name, out);
     out.push('deleted empty label: ' + name);
   }
 
@@ -1396,32 +1436,35 @@ function _classifyFilter_(prior, want, skipInbox) {
   return 'manual';
 }
 
-function rebuildFilters_(out, apply, force) {
+function rebuildFilters_(out, apply, force, deps) {
+  const gw = _depGw_(deps);
+  const spec = _dep_(deps, 'spec', typeof _FILTER_SPEC === 'undefined' ? [] : _FILTER_SPEC);
+  const superseded = _dep_(deps, 'superseded', typeof _FILTER_SUPERSEDED === 'undefined' ? [] : _FILTER_SUPERSEDED);
   out.push((apply ? 'APPLY' : 'DRY-RUN') + ' Rebuild delivery filters (replaces deleted Apple Mail rules)' +
     (force ? '  [FORCE — will overwrite hand-edited filters]' : ''));
   out.push('---');
 
-  const conflicts = _specConflicts_();
+  const conflicts = _specConflicts_(spec);
   if (conflicts.length) {
     out.push('SPEC CONFLICTS — ' + conflicts.length + ' found:');
     conflicts.forEach(function (c) { out.push('  !! ' + c); });
     if (apply) { out.push('ABORTING — refusing to write a spec that double-labels.'); return; }
     out.push('Fix _FILTER_SPEC before applying.');
   } else {
-    out.push('spec conflict check: clean (' + _FILTER_SPEC.length + ' entries)');
+    out.push('spec conflict check: clean (' + spec.length + ' entries)');
   }
   out.push('---');
 
   const labelId = {};
-  (Gmail.Users.Labels.list('me').labels || []).forEach(function (l) { labelId[l.name] = l.id; });
+  gw.listLabels().forEach(function (l) { labelId[l.name] = l.id; });
 
-  const missing = _FILTER_SPEC.filter(function (sp) { return !labelId[sp.label]; });
+  const missing = spec.filter(function (sp) { return !labelId[sp.label]; });
   if (missing.length) {
     missing.forEach(function (sp) { out.push('ABORT — target label missing: ' + sp.label); });
     return;
   }
 
-  const existing = Gmail.Users.Settings.Filters.list('me').filter || [];
+  const existing = gw.listFilters();
   const bySig = {};
   existing.forEach(function (f) {
     const c = f.criteria || {};
@@ -1432,8 +1475,8 @@ function rebuildFilters_(out, apply, force) {
   const touched = {};
   const failures = [];
 
-  for (let i = 0; i < _FILTER_SPEC.length; i++) {
-    const sp = _FILTER_SPEC[i];
+  for (let i = 0; i < spec.length; i++) {
+    const sp = spec[i];
     const want = labelId[sp.label];
     const prior = bySig[_filterSig_(sp.from, sp.query)];
     const desc = (sp.from ? 'from=' + sp.from : 'query=' + sp.query) + ' -> ' + sp.label +
@@ -1462,7 +1505,7 @@ function rebuildFilters_(out, apply, force) {
           '  (was add=[' + adds.join(',') + '] remove=[' + rem.join(',') + '])');
         repaired++; continue;
       }
-      _safeCall(function () { Gmail.Users.Settings.Filters.remove('me', prior.id); return null; },
+      _safeCall(function () { gw.removeFilter(prior.id); return null; },
         'remove filter ' + prior.id, out);
     } else {
       if (!apply) { out.push('CREATE  ' + desc); created++; continue; }
@@ -1480,7 +1523,7 @@ function rebuildFilters_(out, apply, force) {
 
     let res = null, errMsg = null;
     try {
-      res = Gmail.Users.Settings.Filters.create({ criteria: criteria, action: action }, 'me');
+      res = gw.createFilter({ criteria: criteria, action: action });
     } catch (err) {
       errMsg = (err && err.message) || String(err);
     }
@@ -1496,14 +1539,14 @@ function rebuildFilters_(out, apply, force) {
   }
 
   out.push('--- superseded by a broader filter ---');
-  for (let k = 0; k < _FILTER_SUPERSEDED.length; k++) {
-    const sup = _FILTER_SUPERSEDED[k];
+  for (let k = 0; k < superseded.length; k++) {
+    const sup = superseded[k];
     const stale = bySig[_filterSig_(sup.from, sup.query)];
     const label = sup.from ? 'from=' + sup.from : 'query=' + sup.query;
     if (!stale) { out.push('skip (already gone): ' + label); continue; }
     touched[stale.id] = true;
     if (!apply) { out.push('WOULD DELETE ' + label + '  (' + stale.id + ')'); continue; }
-    _safeCall(function () { Gmail.Users.Settings.Filters.remove('me', stale.id); return null; },
+    _safeCall(function () { gw.removeFilter(stale.id); return null; },
       'remove filter ' + stale.id, out);
     out.push('deleted superseded filter: ' + label);
   }
@@ -1532,18 +1575,22 @@ function rebuildFilters_(out, apply, force) {
 }
 
 
-function linkedinNoiseBackfill_(out, apply) {
-  out.push((apply ? 'APPLY' : 'DRY-RUN') + ' LinkedIn noise: ' + _LINKEDIN_NOISE_SRC + ' -> ' + _LINKEDIN_NOISE_DST);
-  const jobs = GmailApp.getUserLabelByName(_LINKEDIN_NOISE_SRC);
-  const misc = GmailApp.getUserLabelByName(_LINKEDIN_NOISE_DST);
-  if (!jobs || !misc) { out.push('ABORT — ' + _LINKEDIN_NOISE_SRC + ' or ' + _LINKEDIN_NOISE_DST + ' missing'); return; }
+function linkedinNoiseBackfill_(out, apply, deps) {
+  const gw = _depGw_(deps);
+  const srcName = _dep_(deps, 'src', typeof _LINKEDIN_NOISE_SRC === 'undefined' ? null : _LINKEDIN_NOISE_SRC);
+  const dstName = _dep_(deps, 'dst', typeof _LINKEDIN_NOISE_DST === 'undefined' ? null : _LINKEDIN_NOISE_DST);
+  const query = _dep_(deps, 'query', typeof _LINKEDIN_NOISE_Q === 'undefined' ? null : _LINKEDIN_NOISE_Q);
+  out.push((apply ? 'APPLY' : 'DRY-RUN') + ' LinkedIn noise: ' + srcName + ' -> ' + dstName);
+  const jobs = gw.getLabel(srcName);
+  const misc = gw.getLabel(dstName);
+  if (!jobs || !misc) { out.push('ABORT — ' + srcName + ' or ' + dstName + ' missing'); return; }
   let moved = 0, safety = 0;
   while (true) {
-    const threads = GmailApp.search(_LINKEDIN_NOISE_Q, 0, 50);
+    const threads = gw.search(query, 0, 50);
     if (threads.length === 0) break;
     if (!apply) { out.push('WOULD MOVE ' + threads.length + '+ threads'); break; }
-    _safeCall(function () { misc.addToThreads(threads); return null; }, 'addToThreads Misc', out);
-    _safeCall(function () { jobs.removeFromThreads(threads); return null; }, 'removeFromThreads ' + _LINKEDIN_NOISE_SRC, out);
+    _safeCall(function () { misc.addToThreads(threads); return null; }, 'addToThreads ' + dstName, out);
+    _safeCall(function () { jobs.removeFromThreads(threads); return null; }, 'removeFromThreads ' + srcName, out);
     moved += threads.length;
     if (++safety > 50) { out.push('safety stop'); break; }
   }

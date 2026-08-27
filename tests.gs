@@ -270,6 +270,371 @@ function testFilterSpec(results)
 }
 
 // ============================================================================
+// MUTATING PATH TESTS
+// ============================================================================
+
+/**
+ * Build a fake label that records what was done to it.
+ *
+ * getThreads() keys on the `max` argument: the drain loops ask for 50 at a
+ * time, while the post-move safety check asks for 1. That lets a test simulate
+ * "a thread was still there when we went to delete the label" without making
+ * the drain loop infinite.
+ *
+ * @param {string} name - Label name
+ * @param {number} count - How many threads it starts with
+ * @param {number} residual - Threads the size-1 safety check should report
+ * @return {Object} Fake label
+ */
+function fakeLabel(name, count, residual)
+{
+  const threads = [];
+  for (let i = 0; i < count; i++)
+  {
+    threads.push({id: name + '#' + i});
+  }
+
+  return {
+    name: name,
+    threads: threads,
+    added: [],
+    getName: function() { return name; },
+    getThreads: function(start, max)
+    {
+      if (max === 1 && residual > 0)
+      {
+        return [{id: name + '#residual'}];
+      }
+      return threads.slice(start, start + max);
+    },
+    addToThreads: function(ts)
+    {
+      const self = this;
+      ts.forEach(function(t) { self.added.push(t); });
+    },
+    removeFromThreads: function(ts)
+    {
+      ts.forEach(function(t)
+      {
+        const i = threads.indexOf(t);
+        if (i !== -1) { threads.splice(i, 1); }
+      });
+    }
+  };
+}
+
+/**
+ * Build a fake Gmail gateway that records every write.
+ *
+ * @param {Object} state - {labels, filters, labelsByName, searchResults, createError}
+ * @return {Object} Gateway with a .calls record
+ */
+function fakeGateway(state)
+{
+  const calls = {created: [], removedFilters: [], deletedLabels: [], searches: 0};
+
+  return {
+    calls: calls,
+    listLabels: function() { return state.labels || []; },
+    listFilters: function() { return state.filters || []; },
+    getLabel: function(name) { return (state.labelsByName || {})[name] || null; },
+    deleteLabel: function(label) { calls.deletedLabels.push(label.getName()); return null; },
+    search: function()
+    {
+      calls.searches++;
+      const batch = (state.searchResults || []).shift();
+      return batch || [];
+    },
+    createFilter: function(resource)
+    {
+      if (state.createError) { throw new Error(state.createError); }
+      calls.created.push(resource);
+      return {id: 'new_' + calls.created.length};
+    },
+    removeFilter: function(id) { calls.removedFilters.push(id); return null; }
+  };
+}
+
+/**
+ * Count how many writes a gateway recorded.
+ *
+ * @param {Object} gw - Fake gateway
+ * @return {number} Total writes
+ */
+function writeCount(gw)
+{
+  return gw.calls.created.length + gw.calls.removedFilters.length + gw.calls.deletedLabels.length;
+}
+
+/**
+ * Test suite for the mutating routes: rebuildFilters_, mergeDrift_ and
+ * linkedinNoiseBackfill_.
+ *
+ * Each test drives the real function through a fake gateway, so the code path
+ * under test is the production one — only the Gmail calls are substituted.
+ *
+ * @param {Object} results - Results accumulator
+ */
+function testMutatingPaths(results)
+{
+  Logger.log('=== Mutating Path Tests ===');
+
+  const READING = 'Label_480';
+  const LABELS = [{id: READING, name: 'Reading'}, {id: 'Label_496', name: 'Misc'}];
+  const SPEC = [{from: 'a@x.com', label: 'Reading', skipInbox: true}];
+
+  // --- dependency injection guards ---
+
+  runTest('_dep_ keeps a falsy but valid injected value', function()
+  {
+    assertEquals(_dep_({query: ''}, 'query', 'PRODUCTION'), '',
+      'An empty string is a real value, not a reason to reach for production config');
+  }, results);
+
+  runTest('_dep_ falls back only when the key is absent', function()
+  {
+    assertEquals(_dep_({}, 'query', 'PRODUCTION'), 'PRODUCTION', 'Absent key should fall back');
+    assertEquals(_dep_(null, 'query', 'PRODUCTION'), 'PRODUCTION', 'No deps at all should fall back');
+  }, results);
+
+  runTest('_depGw_ refuses to reach live Gmail when deps omits the gateway', function()
+  {
+    let threw = false;
+    try { _depGw_({spec: []}); }
+    catch (e) { threw = true; }
+    assert(threw, 'A test that forgets gw must fail loudly, never mutate the real mailbox');
+  }, results);
+
+  // --- rebuildFilters_: dry-run ---
+
+  runTest('rebuildFilters_ dry-run writes nothing', function()
+  {
+    const gw = fakeGateway({labels: LABELS, filters: []});
+    rebuildFilters_([], false, false, {gw: gw, spec: SPEC, superseded: []});
+    assertEquals(writeCount(gw), 0, 'Dry-run must not write');
+  }, results);
+
+  // --- rebuildFilters_: create ---
+
+  runTest('rebuildFilters_ creates a missing filter', function()
+  {
+    const gw = fakeGateway({labels: LABELS, filters: []});
+    rebuildFilters_([], true, false, {gw: gw, spec: SPEC, superseded: []});
+    assertEquals(gw.calls.created.length, 1, 'Should create one filter');
+    assertEquals(gw.calls.created[0].criteria.from, 'a@x.com', 'Criteria should match spec');
+    assertDeepEquals(gw.calls.created[0].action.addLabelIds, [READING], 'Should target Reading');
+    assertContains(gw.calls.created[0].action.removeLabelIds, 'INBOX', 'skipInbox should strip INBOX');
+  }, results);
+
+  runTest('rebuildFilters_ omits removeLabelIds when skipInbox is false', function()
+  {
+    const gw = fakeGateway({labels: LABELS, filters: []});
+    const spec = [{from: 'a@x.com', label: 'Reading', skipInbox: false}];
+    rebuildFilters_([], true, false, {gw: gw, spec: spec, superseded: []});
+    assertNull(gw.calls.created[0].action.removeLabelIds || null, 'Should not touch INBOX');
+  }, results);
+
+  // --- rebuildFilters_: repair ---
+
+  runTest('rebuildFilters_ repairs an empty-action filter', function()
+  {
+    const prior = {id: 'f1', criteria: {from: 'a@x.com'}, action: {addLabelIds: [], removeLabelIds: []}};
+    const gw = fakeGateway({labels: LABELS, filters: [prior]});
+    rebuildFilters_([], true, false, {gw: gw, spec: SPEC, superseded: []});
+    assertDeepEquals(gw.calls.removedFilters, ['f1'], 'Should delete the dead filter');
+    assertEquals(gw.calls.created.length, 1, 'Should recreate it');
+  }, results);
+
+  runTest('rebuildFilters_ preserves unmanaged removeLabelIds on repair', function()
+  {
+    const prior = {id: 'f1', criteria: {from: 'a@x.com'},
+      action: {addLabelIds: [], removeLabelIds: ['INBOX', 'SPAM']}};
+    const gw = fakeGateway({labels: LABELS, filters: [prior]});
+    rebuildFilters_([], true, false, {gw: gw, spec: SPEC, superseded: []});
+    assertContains(gw.calls.created[0].action.removeLabelIds, 'SPAM',
+      'A repair must not drop settings the spec does not manage');
+  }, results);
+
+  runTest('rebuildFilters_ leaves an already-correct filter alone', function()
+  {
+    const prior = {id: 'f1', criteria: {from: 'a@x.com'},
+      action: {addLabelIds: [READING], removeLabelIds: ['INBOX']}};
+    const gw = fakeGateway({labels: LABELS, filters: [prior]});
+    rebuildFilters_([], true, false, {gw: gw, spec: SPEC, superseded: []});
+    assertEquals(writeCount(gw), 0, 'Correct filter needs no work');
+  }, results);
+
+  // --- rebuildFilters_: hand-edited protection ---
+
+  runTest('rebuildFilters_ does not overwrite a hand-edited filter', function()
+  {
+    const prior = {id: 'f1', criteria: {from: 'a@x.com'},
+      action: {addLabelIds: [READING, 'Label_496'], removeLabelIds: ['INBOX']}};
+    const gw = fakeGateway({labels: LABELS, filters: [prior]});
+    const out = [];
+    rebuildFilters_(out, true, false, {gw: gw, spec: SPEC, superseded: []});
+    assertEquals(writeCount(gw), 0, 'Hand edits must survive a rebuild');
+    assert(out.join('\n').indexOf('MANUAL') !== -1, 'Should report it as MANUAL');
+  }, results);
+
+  runTest('rebuildFilters_ overwrites a hand-edited filter under force', function()
+  {
+    const prior = {id: 'f1', criteria: {from: 'a@x.com'},
+      action: {addLabelIds: [READING, 'Label_496'], removeLabelIds: ['INBOX']}};
+    const gw = fakeGateway({labels: LABELS, filters: [prior]});
+    rebuildFilters_([], true, true, {gw: gw, spec: SPEC, superseded: []});
+    assertDeepEquals(gw.calls.removedFilters, ['f1'], 'force should delete it');
+    assertEquals(gw.calls.created.length, 1, 'force should recreate it to spec');
+  }, results);
+
+  // --- rebuildFilters_: failure reporting ---
+
+  runTest('rebuildFilters_ reports a failed create instead of counting success', function()
+  {
+    const gw = fakeGateway({labels: LABELS, filters: [], createError: 'invalid criteria'});
+    const out = [];
+    rebuildFilters_(out, true, false, {gw: gw, spec: SPEC, superseded: []});
+    const text = out.join('\n');
+    assertEquals(gw.calls.created.length, 0, 'Nothing was created');
+    assert(text.indexOf('FAILED') !== -1, 'Should print FAILED');
+    assert(text.indexOf('ACTION REQUIRED') !== -1, 'Should raise ACTION REQUIRED');
+    assert(text.indexOf('Created 0') !== -1, 'Must not count a failure as created');
+  }, results);
+
+  runTest('rebuildFilters_ warns the sender is unfiled when a repair fails', function()
+  {
+    const prior = {id: 'f1', criteria: {from: 'a@x.com'}, action: {addLabelIds: [], removeLabelIds: []}};
+    const gw = fakeGateway({labels: LABELS, filters: [prior], createError: 'invalid criteria'});
+    const out = [];
+    rebuildFilters_(out, true, false, {gw: gw, spec: SPEC, superseded: []});
+    assertDeepEquals(gw.calls.removedFilters, ['f1'], 'Prior filter was already deleted');
+    assert(out.join('\n').indexOf('UNFILED') !== -1, 'Must say the sender is now unfiled');
+  }, results);
+
+  // --- rebuildFilters_: refuses to write a bad spec ---
+
+  runTest('rebuildFilters_ aborts on a conflicting spec without writing', function()
+  {
+    const gw = fakeGateway({labels: LABELS, filters: []});
+    const spec = [
+      {from: 'a@x.com', label: 'Reading', skipInbox: true},
+      {from: 'a@x.com', label: 'Misc', skipInbox: true}
+    ];
+    const out = [];
+    rebuildFilters_(out, true, false, {gw: gw, spec: spec, superseded: []});
+    assertEquals(writeCount(gw), 0, 'A double-labelling spec must not be written');
+    assert(out.join('\n').indexOf('ABORTING') !== -1, 'Should say it aborted');
+  }, results);
+
+  runTest('rebuildFilters_ aborts when a target label is missing', function()
+  {
+    const gw = fakeGateway({labels: [], filters: []});
+    rebuildFilters_([], true, false, {gw: gw, spec: SPEC, superseded: []});
+    assertEquals(writeCount(gw), 0, 'Missing destination must abort before writing');
+  }, results);
+
+  runTest('rebuildFilters_ deletes a superseded filter', function()
+  {
+    const stale = {id: 'old1', criteria: {from: 'narrow@x.com'}, action: {addLabelIds: [READING]}};
+    const gw = fakeGateway({labels: LABELS, filters: [stale]});
+    rebuildFilters_([], true, false,
+      {gw: gw, spec: SPEC, superseded: [{from: 'narrow@x.com'}]});
+    assertContains(gw.calls.removedFilters, 'old1', 'Superseded filter should go');
+  }, results);
+
+  // --- mergeDrift_ ---
+
+  runTest('mergeDrift_ moves threads and deletes the emptied source', function()
+  {
+    const src = fakeLabel('Old/Label', 3, 0);
+    const dst = fakeLabel('Reading', 0, 0);
+    const gw = fakeGateway({labelsByName: {'Old/Label': src, 'Reading': dst}});
+    mergeDrift_([], true, {gw: gw, merges: [{src: 'Old/Label', dst: 'Reading'}], shells: []});
+    assertEquals(dst.added.length, 3, 'All threads should land in the destination');
+    assertDeepEquals(gw.calls.deletedLabels, ['Old/Label'], 'Emptied source should be deleted');
+  }, results);
+
+  runTest('mergeDrift_ keeps a source that still has threads', function()
+  {
+    const src = fakeLabel('Old/Label', 2, 1);
+    const dst = fakeLabel('Reading', 0, 0);
+    const gw = fakeGateway({labelsByName: {'Old/Label': src, 'Reading': dst}});
+    const out = [];
+    mergeDrift_(out, true, {gw: gw, merges: [{src: 'Old/Label', dst: 'Reading'}], shells: []});
+    assertEquals(gw.calls.deletedLabels.length, 0, 'Must not delete a non-empty label');
+    assert(out.join('\n').indexOf('NOT deleting') !== -1, 'Should say why');
+  }, results);
+
+  runTest('mergeDrift_ skips a merge whose destination is missing', function()
+  {
+    const src = fakeLabel('Old/Label', 3, 0);
+    const gw = fakeGateway({labelsByName: {'Old/Label': src}});
+    const out = [];
+    mergeDrift_(out, true, {gw: gw, merges: [{src: 'Old/Label', dst: 'Gone'}], shells: []});
+    assertEquals(writeCount(gw), 0, 'Must not move threads into a missing label');
+    assert(out.join('\n').indexOf('destination missing') !== -1, 'Should explain the skip');
+  }, results);
+
+  runTest('mergeDrift_ dry-run writes nothing', function()
+  {
+    const src = fakeLabel('Old/Label', 3, 0);
+    const dst = fakeLabel('Reading', 0, 0);
+    const gw = fakeGateway({labelsByName: {'Old/Label': src, 'Reading': dst}});
+    mergeDrift_([], false, {gw: gw, merges: [{src: 'Old/Label', dst: 'Reading'}], shells: []});
+    assertEquals(dst.added.length, 0, 'Dry-run must not move anything');
+    assertEquals(writeCount(gw), 0, 'Dry-run must not delete anything');
+  }, results);
+
+  runTest('mergeDrift_ deletes an empty shell but not a populated one', function()
+  {
+    const empty = fakeLabel('Empty/Shell', 0, 0);
+    const full = fakeLabel('Full/Shell', 0, 1);
+    const gw = fakeGateway({labelsByName: {'Empty/Shell': empty, 'Full/Shell': full}});
+    mergeDrift_([], true, {gw: gw, merges: [], shells: ['Empty/Shell', 'Full/Shell']});
+    assertDeepEquals(gw.calls.deletedLabels, ['Empty/Shell'], 'Only the empty shell should go');
+  }, results);
+
+  // --- linkedinNoiseBackfill_ ---
+
+  runTest('linkedinNoiseBackfill_ moves matching threads', function()
+  {
+    const jobs = fakeLabel('Career/Jobs', 0, 0);
+    const misc = fakeLabel('Misc', 0, 0);
+    const hits = [{id: 't1'}, {id: 't2'}];
+    const gw = fakeGateway({
+      labelsByName: {'Career/Jobs': jobs, 'Misc': misc},
+      searchResults: [hits, []]
+    });
+    linkedinNoiseBackfill_([], true,
+      {gw: gw, src: 'Career/Jobs', dst: 'Misc', query: 'q'});
+    assertEquals(misc.added.length, 2, 'Both threads should move to the destination');
+  }, results);
+
+  runTest('linkedinNoiseBackfill_ dry-run writes nothing', function()
+  {
+    const jobs = fakeLabel('Career/Jobs', 0, 0);
+    const misc = fakeLabel('Misc', 0, 0);
+    const gw = fakeGateway({
+      labelsByName: {'Career/Jobs': jobs, 'Misc': misc},
+      searchResults: [[{id: 't1'}], []]
+    });
+    linkedinNoiseBackfill_([], false,
+      {gw: gw, src: 'Career/Jobs', dst: 'Misc', query: 'q'});
+    assertEquals(misc.added.length, 0, 'Dry-run must not move anything');
+  }, results);
+
+  runTest('linkedinNoiseBackfill_ aborts when a label is missing', function()
+  {
+    const gw = fakeGateway({labelsByName: {'Career/Jobs': fakeLabel('Career/Jobs', 0, 0)}});
+    const out = [];
+    linkedinNoiseBackfill_(out, true,
+      {gw: gw, src: 'Career/Jobs', dst: 'Misc', query: 'q'});
+    assertEquals(gw.calls.searches, 0, 'Must not search before checking labels exist');
+    assert(out.join('\n').indexOf('ABORT') !== -1, 'Should abort loudly');
+  }, results);
+}
+
+// ============================================================================
 // VALIDATION TESTS
 // ============================================================================
 
@@ -1019,6 +1384,9 @@ function runAllTests()
   Logger.log('');
 
   testFilterSpec(results);
+  Logger.log('');
+
+  testMutatingPaths(results);
   Logger.log('');
 
   testValidateOrganizationPlan(results);
