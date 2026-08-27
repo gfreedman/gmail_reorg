@@ -275,6 +275,39 @@ newLabels: [
 
 **Want to undo** — The library only adds and removes labels, so emails are never deleted. To reverse a migration, swap `from` and `to` in your plan and run again.
 
+## Design notes
+
+A few decisions that shaped the code, and the reasoning behind them.
+
+**Nothing moves until you say so.** Every mutating operation is a dry run by
+default and needs an explicit flag to act. Runs are idempotent and checkpointed,
+so an operation interrupted by the 6-minute limit is safe to re-run rather than
+something you have to reason about.
+
+**Gmail owns filing, not a mail client.** An earlier version of this setup relied
+on client-side rules in a desktop mail app. They only run while that machine is
+awake, so filing silently stopped whenever the laptop was closed and resumed
+later — producing labels that looked maintained but had gaps. Filing that depends
+on a particular computer being open is not filing. Delivery-time filters run in
+Gmail whether anything else is on or not.
+
+**Archive on arrival only when no human wrote to you.** Newsletters and
+notifications are filed and hidden; anything a person typed is filed and left
+visible. The asymmetry is deliberate — burying a message from a person is
+expensive and burying a newsletter is not, so the rule optimises for the costly
+error rather than treating all mail alike.
+
+**Logic is committed, configuration is not.** Sender rules, label names and
+thread ids live in a git-ignored file; the code that consumes them is in the
+repo. That keeps the logic reviewable without personal data ever entering git,
+and a missing configuration raises immediately rather than degrading into a run
+that does nothing and reports success.
+
+**Guards are mutation-tested.** A passing test suite means nothing unless it
+fails when the code breaks, so `test/mutation_test.js` disables each safety check
+in turn and confirms a test catches it. Two guards were found to be untested that
+way, including one that was never wired in.
+
 ## Limitations
 
 - Google Apps Script has a 6-minute execution limit. The script handles this automatically with batch processing and auto-resume.
@@ -284,7 +317,9 @@ newLabels: [
 
 ## Privacy
 
-All code runs inside your Google account. Nothing is sent to any external server. The only thing written outside Gmail is the optional backup spreadsheet, which goes to your Google Drive.
+All code runs inside your Google account, and nothing is sent to a third-party server. The only thing written outside Gmail is the optional backup spreadsheet, which goes to your own Google Drive.
+
+If you deploy the optional toolkit as a Web App, it answers HTTP requests that carry a valid token — see [SECURITY.md](SECURITY.md) for that access model.
 
 ## Contributing
 
