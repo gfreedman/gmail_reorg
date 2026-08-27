@@ -1290,7 +1290,12 @@ function authorize() {
 
 
 // ---------------------------------------------------------------------------
-// Gmail gateway — the ONLY place the mutating routes touch Gmail.
+// Gmail gateway — every global Gmail entry point the mutating routes use.
+//
+// Note the boundary: this covers the global services (GmailApp, Gmail). The
+// label objects getLabel() hands back carry their own Gmail methods
+// (getThreads, addToThreads, removeFromThreads), so tests substitute those too
+// via fakeLabel — the gateway alone is not a complete isolation boundary.
 //
 // Every mutating function takes an optional `deps` argument; tests pass a fake
 // gateway plus fixture config so the real code paths run without touching the
@@ -1311,6 +1316,13 @@ const _GW = {
 // Deliberately NOT `deps.x || fallback`: an empty string or 0 is a valid config
 // value, and `||` would silently swap it for production data. Tests would then
 // pass while exercising the real spec instead of their fixture.
+//
+// Callers pass the production constant directly as `fallback`. Because JS
+// evaluates arguments eagerly that constant is read even when deps overrides it,
+// so a missing _private_data.gs raises a ReferenceError immediately. That is the
+// intended behaviour — an absent configuration must abort the run, not quietly
+// reduce it to a no-op that reports success. Tests declare their own stubs (see
+// test/mutation_test.js) rather than making this file tolerate the gap.
 function _dep_(deps, key, fallback) {
   return (deps && deps[key] !== undefined) ? deps[key] : fallback;
 }
@@ -1328,8 +1340,8 @@ function _depGw_(deps) {
 
 function mergeDrift_(out, apply, deps) {
   const gw = _depGw_(deps);
-  const merges = _dep_(deps, 'merges', typeof _DRIFT_MERGES === 'undefined' ? [] : _DRIFT_MERGES);
-  const shells = _dep_(deps, 'shells', typeof _DRIFT_SHELLS === 'undefined' ? [] : _DRIFT_SHELLS);
+  const merges = _dep_(deps, 'merges', _DRIFT_MERGES);
+  const shells = _dep_(deps, 'shells', _DRIFT_SHELLS);
   const startTime = new Date().getTime();
   const MAX_RUNTIME = 300000;
   out.push((apply ? 'APPLY' : 'DRY-RUN') + ' Merge Apple Mail drift labels into the plan');
@@ -1387,9 +1399,16 @@ function mergeDrift_(out, apply, deps) {
 
 function _filterSig_(from, query) { return (from || '') + '||' + (query || ''); }
 
-// Gmail's from: matching is substring-based and EVERY matching filter fires — there
-// is no first-match-wins — so two spec entries that can match the same message will
-// both label it. Detected statically before anything is written.
+// Gmail runs EVERY matching filter — there is no first-match-wins — so two spec
+// entries that can match the same message will both label it. Detected statically
+// before anything is written.
+//
+// The subsumption test below asks whether one criterion is a substring of another.
+// That is a deliberate over-approximation of Gmail's actual from: matching, which
+// tokenises rather than matching raw substrings: it can report a conflict that
+// Gmail would not produce, but it cannot miss one of the bare-domain conflicts
+// this exists to catch. False positives are cheap (fix the spec); a false negative
+// means silent double-labelling.
 function _specAddresses_(sp) {
   if (sp.query) { return ['query::' + String(sp.query).toLowerCase()]; }
   return String(sp.from).toLowerCase().split(/\s+or\s+/)
@@ -1438,8 +1457,8 @@ function _classifyFilter_(prior, want, skipInbox) {
 
 function rebuildFilters_(out, apply, force, deps) {
   const gw = _depGw_(deps);
-  const spec = _dep_(deps, 'spec', typeof _FILTER_SPEC === 'undefined' ? [] : _FILTER_SPEC);
-  const superseded = _dep_(deps, 'superseded', typeof _FILTER_SUPERSEDED === 'undefined' ? [] : _FILTER_SUPERSEDED);
+  const spec = _dep_(deps, 'spec', _FILTER_SPEC);
+  const superseded = _dep_(deps, 'superseded', _FILTER_SUPERSEDED);
   out.push((apply ? 'APPLY' : 'DRY-RUN') + ' Rebuild delivery filters (replaces deleted Apple Mail rules)' +
     (force ? '  [FORCE — will overwrite hand-edited filters]' : ''));
   out.push('---');
@@ -1577,9 +1596,9 @@ function rebuildFilters_(out, apply, force, deps) {
 
 function linkedinNoiseBackfill_(out, apply, deps) {
   const gw = _depGw_(deps);
-  const srcName = _dep_(deps, 'src', typeof _LINKEDIN_NOISE_SRC === 'undefined' ? null : _LINKEDIN_NOISE_SRC);
-  const dstName = _dep_(deps, 'dst', typeof _LINKEDIN_NOISE_DST === 'undefined' ? null : _LINKEDIN_NOISE_DST);
-  const query = _dep_(deps, 'query', typeof _LINKEDIN_NOISE_Q === 'undefined' ? null : _LINKEDIN_NOISE_Q);
+  const srcName = _dep_(deps, 'src', _LINKEDIN_NOISE_SRC);
+  const dstName = _dep_(deps, 'dst', _LINKEDIN_NOISE_DST);
+  const query = _dep_(deps, 'query', _LINKEDIN_NOISE_Q);
   out.push((apply ? 'APPLY' : 'DRY-RUN') + ' LinkedIn noise: ' + srcName + ' -> ' + dstName);
   const jobs = gw.getLabel(srcName);
   const misc = gw.getLabel(dstName);
