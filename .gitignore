@@ -7,6 +7,16 @@ private/
 personal/
 backups/
 
+# Reorg toolkit configuration — personal sender data (friend/family addresses,
+# per-sender filing rules, thread IDs, label taxonomy). Kept local only, like the
+# ORGANIZATION_PLAN. The logic that consumes it lives in reorg_toolkit.gs, which
+# IS committed.
+_private_data.gs
+
+# Superseded by the reorg_toolkit.gs / _private_data.gs split (2026-08-26).
+_find_overlaps.gs
+_find_overlaps.js
+
 # Data exports
 *.csv
 *.xlsx

@@ -122,6 +122,154 @@ function runTest(testName, testFn, results)
 }
 
 // ============================================================================
+// FILTER SPEC TESTS
+// ============================================================================
+
+/**
+ * Test suite for the delivery-filter helpers in reorg_toolkit.gs.
+ *
+ * These use injected fixture specs rather than the real _FILTER_SPEC, so the
+ * suite runs without _private_data.gs being present.
+ *
+ * @param {Object} results - Results accumulator
+ */
+function testFilterSpec(results)
+{
+  Logger.log('=== Filter Spec Tests ===');
+
+  const R = 'Label_480';
+
+  /**
+   * Build a filter resource with the given action, as the Gmail API returns it.
+   *
+   * @param {Array<string>} adds - addLabelIds
+   * @param {Array<string>} removes - removeLabelIds
+   * @return {Object} Filter-shaped object
+   */
+  function filterWith(adds, removes)
+  {
+    return {action: {addLabelIds: adds, removeLabelIds: removes}};
+  }
+
+  // --- criteria tokenisation ---
+
+  runTest('_specAddresses_ splits an OR list', function()
+  {
+    assertDeepEquals(_specAddresses_({from: 'a@x.com OR b@x.com OR c@x.com'}),
+      ['a@x.com', 'b@x.com', 'c@x.com'], 'Should split on OR');
+  }, results);
+
+  runTest('_specAddresses_ lowercases a single address', function()
+  {
+    assertDeepEquals(_specAddresses_({from: 'Solo@X.com'}), ['solo@x.com'], 'Should lowercase');
+  }, results);
+
+  runTest('_specAddresses_ namespaces query criteria', function()
+  {
+    assertDeepEquals(_specAddresses_({query: 'list:(<y>)'}), ['query::list:(<y>)'],
+      'Query should not collide with an address');
+  }, results);
+
+  // --- conflict detection ---
+  // Gmail runs EVERY matching filter, so two entries matching one message double-label.
+
+  runTest('_specConflicts_ passes a clean spec', function()
+  {
+    const spec = [
+      {from: 'a@x.com', label: 'Reading', skipInbox: true},
+      {from: 'b@y.com', label: 'Misc', skipInbox: true}
+    ];
+    assertEquals(_specConflicts_(spec).length, 0, 'Distinct addresses should not conflict');
+  }, results);
+
+  runTest('_specConflicts_ catches a duplicated address', function()
+  {
+    const spec = [
+      {from: 'a@x.com', label: 'Reading', skipInbox: true},
+      {from: 'a@x.com', label: 'Misc', skipInbox: true}
+    ];
+    assertEquals(_specConflicts_(spec).length, 1, 'Same address in two entries should conflict');
+  }, results);
+
+  runTest('_specConflicts_ catches a bare domain subsuming an address', function()
+  {
+    // This is the exact shape of the Apple Mail rule that caused the 2026 drift:
+    // a bare "linkedin.com" swallowing job alerts, InMail and digests alike.
+    const spec = [
+      {from: 'jobalerts-noreply@linkedin.com', label: 'Career/Jobs', skipInbox: true},
+      {from: 'linkedin.com', label: 'Misc', skipInbox: true}
+    ];
+    assert(_specConflicts_(spec).length > 0, 'Bare domain should be flagged');
+  }, results);
+
+  runTest('_specConflicts_ does not flag distinct query criteria', function()
+  {
+    const spec = [
+      {query: 'list:(<a.substack.com>)', label: 'Reading', skipInbox: true},
+      {query: 'list:(<b.substack.com>)', label: 'Reading', skipInbox: true}
+    ];
+    assertEquals(_specConflicts_(spec).length, 0, 'Different lists should not conflict');
+  }, results);
+
+  // --- classification: what rebuildFilters_ is allowed to overwrite ---
+
+  runTest('_classifyFilter_ recognises an exact match', function()
+  {
+    assertEquals(_classifyFilter_(filterWith([R], ['INBOX']), R, true), 'ok',
+      'Spec-matching filter needs no work');
+  }, results);
+
+  runTest('_classifyFilter_ preserves unmanaged removeLabelIds', function()
+  {
+    assertEquals(_classifyFilter_(filterWith([R], ['INBOX', 'SPAM']), R, true), 'ok',
+      'Extra removes are not a reason to rewrite');
+  }, results);
+
+  runTest('_classifyFilter_ treats an empty action as repairable', function()
+  {
+    assertEquals(_classifyFilter_(filterWith([], []), R, true), 'repair',
+      'Orphaned filter carries no user intent');
+  }, results);
+
+  runTest('_classifyFilter_ treats a missing action as repairable', function()
+  {
+    assertEquals(_classifyFilter_({}, R, true), 'repair', 'Absent action should not throw');
+  }, results);
+
+  runTest('_classifyFilter_ protects a hand-added second label', function()
+  {
+    assertEquals(_classifyFilter_(filterWith([R, 'Label_496'], ['INBOX']), R, true), 'manual',
+      'Never silently discard a label the user added');
+  }, results);
+
+  runTest('_classifyFilter_ protects a different target label', function()
+  {
+    assertEquals(_classifyFilter_(filterWith(['Label_496'], ['INBOX']), R, true), 'manual',
+      'A retargeted filter is a deliberate edit');
+  }, results);
+
+  runTest('_classifyFilter_ protects a flipped inbox flag', function()
+  {
+    assertEquals(_classifyFilter_(filterWith([R], []), R, true), 'manual',
+      'User removed skip-inbox; respect it');
+  }, results);
+
+  runTest('_classifyFilter_ protects an added inbox flag', function()
+  {
+    assertEquals(_classifyFilter_(filterWith([R], ['INBOX']), R, false), 'manual',
+      'User added skip-inbox; respect it');
+  }, results);
+
+  // --- signature keying ---
+
+  runTest('_filterSig_ separates from and query criteria', function()
+  {
+    assert(_filterSig_('a@x.com', null) !== _filterSig_(null, 'a@x.com'),
+      'A from and a query with the same text are different filters');
+  }, results);
+}
+
+// ============================================================================
 // VALIDATION TESTS
 // ============================================================================
 
@@ -868,6 +1016,9 @@ function runAllTests()
 
   // Run all test suites
   testValidateLabelName(results);
+  Logger.log('');
+
+  testFilterSpec(results);
   Logger.log('');
 
   testValidateOrganizationPlan(results);
