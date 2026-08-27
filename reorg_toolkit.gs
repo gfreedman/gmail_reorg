@@ -2397,76 +2397,6 @@ function inboxTriage_(out, apply)
 // It touches the filters API so Google grants gmail.settings.basic; after that the
 // listfilters and rebuildfilters routes work over curl.
 /**
- * Grant gmail.settings.basic by touching the filters API once from the editor.
- *
- * Run manually from the Apps Script editor and approve the consent screen; the
- * deployed Web App cannot request the scope for itself.
- *
- * @return {string} Confirmation message.
- */
-function authorize()
-{
-  Gmail.Users.Settings.Filters.list('me');
-  return 'authorized — gmail.settings.basic granted';
-}
-
-// ---------------------------------------------------------------------------
-// Gmail gateway — every global Gmail entry point the mutating routes use.
-//
-// Note the boundary: this covers the global services (GmailApp, Gmail). The
-// label objects getLabel() hands back carry their own Gmail methods
-// (getThreads, addToThreads, removeFromThreads), so tests substitute those too
-// via fakeLabel — the gateway alone is not a complete isolation boundary.
-//
-// Every mutating function takes an optional `deps` argument; tests pass a fake
-// gateway plus fixture config so the real code paths run without touching the
-// mailbox. Production callers omit it and get _GW below.
-// ---------------------------------------------------------------------------
-const _GW =
-{
-  listLabels: function()
-  {
-    return Gmail.Users.Labels.list('me').labels || [];
-  },
-  getLabel: function(name)
-  {
-    return GmailApp.getUserLabelByName(name);
-  },
-  deleteLabel: function(label)
-  {
-    return GmailApp.deleteLabel(label);
-  },
-  search: function(q, start, max)
-  {
-    return GmailApp.search(q, start, max);
-  },
-  listFilters: function()
-  {
-    return Gmail.Users.Settings.Filters.list('me').filter || [];
-  },
-  createFilter: function(resource)
-  {
-    return Gmail.Users.Settings.Filters.create(resource, 'me');
-  },
-  removeFilter: function(id)
-  {
-    return Gmail.Users.Settings.Filters.remove('me', id);
-  }
-};
-
-// Resolve one injected dependency.
-//
-// Deliberately NOT `deps.x || fallback`: an empty string or 0 is a valid config
-// value, and `||` would silently swap it for production data. Tests would then
-// pass while exercising the real spec instead of their fixture.
-//
-// Callers pass the production constant directly as `fallback`. Because JS
-// evaluates arguments eagerly that constant is read even when deps overrides it,
-// so a missing _private_data.gs raises a ReferenceError immediately. That is the
-// intended behaviour — an absent configuration must abort the run, not quietly
-// reduce it to a no-op that reports success. Tests declare their own stubs (see
-// test/mutation_test.js) rather than making this file tolerate the gap.
-/**
  * Resolve one injected dependency, falling back to production configuration.
  *
  * @param {Object} [deps] - Injected dependencies, or null in production.
@@ -3067,34 +2997,6 @@ function linkedinNoiseBackfill_(out, apply, deps)
     }
   }
   out.push((apply ? 'Moved ' + moved : 'Dry-run only') + '. Re-run safe (idempotent).');
-}
-
-/**
- * Script Property holding the shared secret required by every Web App request.
- *
- * Kept in Script Properties rather than in source so it is never committed and
- * can be rotated without a redeploy.
- */
-const _TOKEN_PROPERTY = 'WEBAPP_TOKEN';
-
-/**
- * Generate and store a new Web App token, returning it once.
- *
- * Run from the Apps Script editor. Rotating is simply running it again: the old
- * token stops working immediately, which is the response to a leaked URL.
- *
- * @return {string} The new token. Copy it now; it is not displayed again.
- */
-function setWebAppToken()
-{
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
-  let token = '';
-  for (let i = 0; i < 40; i++)
-  {
-    token += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  PropertiesService.getScriptProperties().setProperty(_TOKEN_PROPERTY, token);
-  return token;
 }
 
 /**

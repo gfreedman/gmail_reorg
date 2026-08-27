@@ -17,6 +17,14 @@ const R = path.join(__dirname, '..') + path.sep;
 
 // Mutations: [name, find, replace, testNamesExpectedToFail]
 const MUTATIONS = [
+  ['trigger install stacks duplicates',
+   "const removed = _removeMaintenanceTriggers_(app);",
+   "const removed = 0;",
+   ['replaces rather than stacking duplicates']],
+  ['trigger removal ignores the handler filter',
+   "if (existing[i].getHandlerFunction() === _MAINTENANCE_HANDLER)",
+   "if (true)",
+   ['leaves unrelated triggers alone']],
   ['auth check removed from doGet',
    "if (!_authorized_(e, out))",
    "if (false)",
@@ -89,7 +97,7 @@ function anchor(literal) {
   return new RegExp(escaped.replace(/\s+/g, '\\s+'));
 }
 
-function runSuite(toolkitSrc) {
+function runSuite(sources) {
   const utils = fs.readFileSync(R + 'utils.gs', 'utf8');
   const tests = fs.readFileSync(R + 'tests.gs', 'utf8');
   // _private_data.gs is git-ignored, so a clean clone will not have it. The
@@ -132,7 +140,7 @@ function runSuite(toolkitSrc) {
     var _unusedProps = {},
         SpreadsheetApp = {}, DriveApp = {}, Utilities = { sleep: function () {} };
   `;
-  const body = prelude + priv + '\n' + utils + '\n' + toolkitSrc + '\n' + tests + `
+  const body = prelude + priv + '\n' + utils + '\n' + sources.toolkit + '\n' + sources.admin + '\n' + tests + `
     var results = {passed: 0, failed: 0, errors: []};
     testFilterSpec(results);
     testMutatingPaths(results);
@@ -142,8 +150,21 @@ function runSuite(toolkitSrc) {
   catch (e) { return {passed: 0, failed: -1, errors: [{test: 'LOAD', error: e.message}]}; }
 }
 
-const clean = fs.readFileSync(R + 'reorg_toolkit.gs', 'utf8');
-const base = runSuite(clean);
+// Mutations may target any source file, not just the toolkit: the maintenance
+// trigger lives in admin.gs, and anchoring only in reorg_toolkit.gs silently
+// reported those mutants as "anchor not found".
+const MUTABLE = ['reorg_toolkit.gs', 'admin.gs'];
+const clean = {};
+MUTABLE.forEach(function (f) { clean[f] = fs.readFileSync(R + f, 'utf8'); });
+
+function sourcesFrom(overrides) {
+  return {
+    toolkit: (overrides && overrides['reorg_toolkit.gs']) || clean['reorg_toolkit.gs'],
+    admin: (overrides && overrides['admin.gs']) || clean['admin.gs']
+  };
+}
+
+const base = runSuite(sourcesFrom(null));
 console.log('baseline: ' + base.passed + ' passed, ' + base.failed + ' failed');
 if (base.failed !== 0) { console.log(JSON.stringify(base.errors, null, 2)); process.exit(1); }
 
@@ -151,8 +172,11 @@ let survivors = 0;
 MUTATIONS.forEach(function (m) {
   const [name, find, repl, expect] = m;
   const pattern = anchor(find);
-  if (!pattern.test(clean)) { console.log('SKIP  ' + name + ' — anchor not found'); survivors++; return; }
-  const r = runSuite(clean.replace(pattern, repl));
+  const target = MUTABLE.find(function (f) { return pattern.test(clean[f]); });
+  if (!target) { console.log('SKIP  ' + name + ' — anchor not found'); survivors++; return; }
+  const overrides = {};
+  overrides[target] = clean[target].replace(pattern, repl);
+  const r = runSuite(sourcesFrom(overrides));
   const failedNames = r.errors.map(e => e.test).join(' | ');
   const caught = expect.every(frag => failedNames.includes(frag));
   console.log((caught ? 'KILLED  ' : 'SURVIVED ') + name + '  (' + r.failed + ' test(s) failed)');

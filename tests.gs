@@ -393,6 +393,75 @@ function testMutatingPaths(results)
   const LABELS = [{id: READING, name: 'Reading'}, {id: 'Label_496', name: 'Misc'}];
   const SPEC = [{from: 'a@x.com', label: 'Reading', skipInbox: true}];
 
+  // --- scheduled maintenance trigger ---
+
+  /**
+   * Build a fake ScriptApp that records trigger creation and deletion.
+   *
+   * @param {Array<Object>} existing - Triggers already installed
+   * @return {Object} Fake ScriptApp with a .created / .deleted record
+   */
+  function fakeScriptApp(existing)
+  {
+    const state = {created: [], deleted: [], triggers: existing.slice()};
+    const builder =
+    {
+      timeBased: function() { return builder; },
+      everyDays: function() { return builder; },
+      atHour: function() { return builder; },
+      create: function() { state.created.push(state.pending); }
+    };
+    return {
+      state: state,
+      getProjectTriggers: function() { return state.triggers; },
+      deleteTrigger: function(t) { state.deleted.push(t.getHandlerFunction()); },
+      newTrigger: function(name) { state.pending = name; return builder; }
+    };
+  }
+
+  /**
+   * Build a fake trigger.
+   *
+   * @param {string} handler - Handler function name
+   * @return {Object} Fake trigger
+   */
+  function fakeTrigger(handler)
+  {
+    return {getHandlerFunction: function() { return handler; }};
+  }
+
+  runTest('installMaintenanceTrigger creates the trigger when none exists', function()
+  {
+    const app = fakeScriptApp([]);
+    installMaintenanceTrigger({scriptApp: app});
+    assertDeepEquals(app.state.created, [_MAINTENANCE_HANDLER], 'Should create exactly one');
+    assertEquals(app.state.deleted.length, 0, 'Nothing to delete');
+  }, results);
+
+  runTest('installMaintenanceTrigger replaces rather than stacking duplicates', function()
+  {
+    // Installing twice is the likely human error; it must not leave the
+    // maintenance sweep running two or three times a night.
+    const app = fakeScriptApp([fakeTrigger(_MAINTENANCE_HANDLER)]);
+    installMaintenanceTrigger({scriptApp: app});
+    assertDeepEquals(app.state.deleted, [_MAINTENANCE_HANDLER], 'Should delete the existing one');
+    assertEquals(app.state.created.length, 1, 'Should end up with exactly one');
+  }, results);
+
+  runTest('installMaintenanceTrigger leaves unrelated triggers alone', function()
+  {
+    const app = fakeScriptApp([fakeTrigger('someOtherJob')]);
+    installMaintenanceTrigger({scriptApp: app});
+    assertEquals(app.state.deleted.length, 0, 'Must not delete triggers it does not own');
+  }, results);
+
+  runTest('removeMaintenanceTrigger deletes only the maintenance handler', function()
+  {
+    const app = fakeScriptApp([fakeTrigger(_MAINTENANCE_HANDLER), fakeTrigger('someOtherJob')]);
+    removeMaintenanceTrigger({scriptApp: app});
+    assertDeepEquals(app.state.deleted, [_MAINTENANCE_HANDLER], 'Only its own handler');
+  }, results);
+
   // --- Web App authorisation ---
 
   /**
