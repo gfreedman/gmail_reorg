@@ -37,9 +37,12 @@ const MUTATIONS = [
   ['unmanaged removes dropped',
    "const removes = (sp.skipInbox ? ['INBOX'] : []).concat(carried);", "const removes = (sp.skipInbox ? ['INBOX'] : []);",
    ['preserves unmanaged removeLabelIds']],
+  // Anchored on the gw.deleteLabel(src) call that follows, because three
+  // separate functions contain an identical `remaining.length === 0` check and a
+  // looser anchor silently mutates the wrong one.
   ['non-empty source deleted anyway',
-   "if (remaining.length === 0) {\n        _safeCall(function () { gw.deleteLabel(src); return null; }",
-   "if (true) {\n        _safeCall(function () { gw.deleteLabel(src); return null; }",
+   "if (remaining.length === 0) { _safeCall(function() { gw.deleteLabel(src);",
+   "if (true) { _safeCall(function() { gw.deleteLabel(src);",
    ['keeps a source that still has threads']],
   ['empty-shell guard removed',
    "if (label.getThreads(0, 1).length > 0) { out.push('NOT deleting ' + name + ' — still has threads'); continue; }",
@@ -57,6 +60,22 @@ const MUTATIONS = [
    "if (!apply) { out.push('WOULD MOVE ' + threads.length + '+ from ' + srcName + ' -> ' + dstName); break; }", "if (false) { break; }",
    ['mergeDrift_ dry-run writes nothing']],
 ];
+
+/**
+ * Compile a literal source snippet into a whitespace-tolerant RegExp.
+ *
+ * Anchors used to be exact strings, which coupled them to the source
+ * formatting: reformatting the file to Allman braces turned every mutation into
+ * "anchor not found" and would have silently disarmed the suite. Matching runs
+ * of whitespace as \s+ makes an anchor describe the code rather than its layout.
+ *
+ * @param {string} literal - Source snippet to match
+ * @return {RegExp} Whitespace-tolerant pattern
+ */
+function anchor(literal) {
+  const escaped = literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(escaped.replace(/\s+/g, '\\s+'));
+}
 
 function runSuite(toolkitSrc) {
   const utils = fs.readFileSync(R + 'utils.gs', 'utf8');
@@ -102,8 +121,9 @@ if (base.failed !== 0) { console.log(JSON.stringify(base.errors, null, 2)); proc
 let survivors = 0;
 MUTATIONS.forEach(function (m) {
   const [name, find, repl, expect] = m;
-  if (!clean.includes(find)) { console.log('SKIP  ' + name + ' — anchor not found'); survivors++; return; }
-  const r = runSuite(clean.replace(find, repl));
+  const pattern = anchor(find);
+  if (!pattern.test(clean)) { console.log('SKIP  ' + name + ' — anchor not found'); survivors++; return; }
+  const r = runSuite(clean.replace(pattern, repl));
   const failedNames = r.errors.map(e => e.test).join(' | ');
   const caught = expect.every(frag => failedNames.includes(frag));
   console.log((caught ? 'KILLED  ' : 'SURVIVED ') + name + '  (' + r.failed + ' test(s) failed)');
