@@ -24,16 +24,18 @@ const _TOKEN_PROPERTY = 'WEBAPP_TOKEN';
  * Run from the Apps Script editor. Rotating is simply running it again: the old
  * token stops working immediately, which is the response to a leaked URL.
  *
+ * Built from Utilities.getUuid(), which is backed by SecureRandom. The obvious
+ * alternative — picking characters with Math.random() — is NOT suitable here:
+ * V8's Math.random is a fast non-cryptographic PRNG whose internal state can be
+ * recovered from a modest number of outputs, and this token is the only thing
+ * standing between the deployment URL and full mailbox access. Two UUIDs give
+ * 244 bits of entropy.
+ *
  * @return {string} The new token. Copy it now; it is not displayed again.
  */
 function setWebAppToken()
 {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
-  let token = '';
-  for (let i = 0; i < 40; i++)
-  {
-    token += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
+  const token = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
   PropertiesService.getScriptProperties().setProperty(_TOKEN_PROPERTY, token);
   return token;
 }

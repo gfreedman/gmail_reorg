@@ -504,6 +504,26 @@ function testMutatingPaths(results)
     return token === undefined ? {parameter: {}} : {parameter: {token: token}};
   }
 
+  runTest('setWebAppToken produces a long, unique, high-entropy token', function()
+  {
+    const props = PropertiesService.getScriptProperties();
+    const saved = props.getProperty(_TOKEN_PROPERTY);
+    try
+    {
+      const first = setWebAppToken();
+      const second = setWebAppToken();
+      assert(first.length >= 32, 'Token must be long enough to resist guessing');
+      assert(first !== second, 'Each call must produce a fresh token');
+      assertEquals(props.getProperty(_TOKEN_PROPERTY), second, 'The latest token must be stored');
+      assert(/^[0-9a-f]+$/.test(first), 'Should be hex from the UUID source');
+    }
+    finally
+    {
+      if (saved) { props.setProperty(_TOKEN_PROPERTY, saved); }
+      else { props.deleteProperty(_TOKEN_PROPERTY); }
+    }
+  }, results);
+
   runTest('_constantTimeEquals_ matches identical strings', function()
   {
     assert(_constantTimeEquals_('abc123', 'abc123'), 'Equal strings must compare equal');

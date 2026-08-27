@@ -125,6 +125,11 @@ function runSuite(sources) {
   const prelude = `
     var Logger = { log: function () {} };
     var Gmail = {}, GmailApp = {};
+    var _uuidSeq = 0;
+    var Utilities = {
+      sleep: function () {},
+      getUuid: function () { _uuidSeq++; return 'abcdef01-2345-4678-9abc-def01234567' + (_uuidSeq % 10); }
+    };
     var ContentService = {
       MimeType: { TEXT: 'TEXT' },
       createTextOutput: function (t) {
@@ -142,7 +147,7 @@ function runSuite(sources) {
       }
     };
     var _unusedProps = {},
-        SpreadsheetApp = {}, DriveApp = {}, Utilities = { sleep: function () {} };
+        SpreadsheetApp = {}, DriveApp = {};
   `;
   const body = prelude + priv + '\n' + utils + '\n' + sources.toolkit + '\n' + sources.admin + '\n' + tests + `
     var results = {passed: 0, failed: 0, errors: []};
