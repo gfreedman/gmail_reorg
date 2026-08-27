@@ -17,6 +17,18 @@ const R = path.join(__dirname, '..') + path.sep;
 
 // Mutations: [name, find, replace, testNamesExpectedToFail]
 const MUTATIONS = [
+  ['auth check removed from doGet',
+   "if (!_authorized_(e, out))",
+   "if (false)",
+   ['doGet refuses an unauthorised request before routing']],
+  ['auth fails OPEN when unconfigured',
+   "if (!expected) { out.push('DENIED — no token configured. Run setWebAppToken() from the Apps Script editor.'); return false; }",
+   "if (!expected) { return true; }",
+   ['fails closed when no token is configured']],
+  ['token comparison always true',
+   "if (!_constantTimeEquals_(given, expected))",
+   "if (false)",
+   ['rejects a missing or wrong token']],
   ['gateway fallback guard removed',
    "if (!deps.gw) { throw new Error('deps supplied without a gw gateway — refusing to fall back to live Gmail'); }",
    "if (false) { }",
@@ -100,7 +112,24 @@ function runSuite(toolkitSrc) {
   const priv = fs.existsSync(privPath) ? fs.readFileSync(privPath, 'utf8') : PRIVATE_STUBS;
   const prelude = `
     var Logger = { log: function () {} };
-    var Gmail = {}, GmailApp = {}, PropertiesService = {},
+    var Gmail = {}, GmailApp = {};
+    var ContentService = {
+      MimeType: { TEXT: 'TEXT' },
+      createTextOutput: function (t) {
+        return { _t: t, getContent: function () { return this._t; }, setMimeType: function () { return this; } };
+      }
+    };
+    var _props = {};
+    var PropertiesService = {
+      getScriptProperties: function () {
+        return {
+          getProperty: function (k) { return Object.prototype.hasOwnProperty.call(_props, k) ? _props[k] : null; },
+          setProperty: function (k, v) { _props[k] = v; },
+          deleteProperty: function (k) { delete _props[k]; }
+        };
+      }
+    };
+    var _unusedProps = {},
         SpreadsheetApp = {}, DriveApp = {}, Utilities = { sleep: function () {} };
   `;
   const body = prelude + priv + '\n' + utils + '\n' + toolkitSrc + '\n' + tests + `

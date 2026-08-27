@@ -3070,6 +3070,93 @@ function linkedinNoiseBackfill_(out, apply, deps)
 }
 
 /**
+ * Script Property holding the shared secret required by every Web App request.
+ *
+ * Kept in Script Properties rather than in source so it is never committed and
+ * can be rotated without a redeploy.
+ */
+const _TOKEN_PROPERTY = 'WEBAPP_TOKEN';
+
+/**
+ * Generate and store a new Web App token, returning it once.
+ *
+ * Run from the Apps Script editor. Rotating is simply running it again: the old
+ * token stops working immediately, which is the response to a leaked URL.
+ *
+ * @return {string} The new token. Copy it now; it is not displayed again.
+ */
+function setWebAppToken()
+{
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  let token = '';
+  for (let i = 0; i < 40; i++)
+  {
+    token += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  PropertiesService.getScriptProperties().setProperty(_TOKEN_PROPERTY, token);
+  return token;
+}
+
+/**
+ * Compare two strings without short-circuiting on the first differing byte.
+ *
+ * The timing signal over HTTPS is small, but a token check is exactly the place
+ * where leaking one is avoidable for three lines of code.
+ *
+ * @param {string} a - First string.
+ * @param {string} b - Second string.
+ * @return {boolean} True if equal.
+ */
+function _constantTimeEquals_(a, b)
+{
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length)
+  {
+    return false;
+  }
+  let diff = 0;
+  for (let i = 0; i < a.length; i++)
+  {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+/**
+ * Authorise a Web App request.
+ *
+ * The deployment is ANYONE_ANONYMOUS and executes as the deploying user, so a
+ * request carries full Gmail authority: without this check anyone holding the
+ * URL could trash mail via passFtrash&apply=1 or dump every thread id via
+ * backup. An unguessable URL is not an access control — URLs leak through shell
+ * history, proxy logs and clipboards.
+ *
+ * Fails closed: if no token has been configured, every route is refused rather
+ * than left open.
+ *
+ * @param {Object} e - Apps Script event object.
+ * @param {Array<string>} out - Accumulator for the response.
+ * @return {boolean} True if the request may proceed.
+ */
+function _authorized_(e, out)
+{
+  const expected = PropertiesService.getScriptProperties().getProperty(_TOKEN_PROPERTY);
+  if (!expected)
+  {
+    out.push('DENIED — no token configured. Run setWebAppToken() from the Apps Script editor.');
+    return false;
+  }
+  const given = (e && e.parameter && e.parameter.token) || '';
+  if (!_constantTimeEquals_(given, expected))
+  {
+    // Deliberately says nothing about which route was requested or why the
+    // token failed.
+    out.push('DENIED');
+    return false;
+  }
+  return true;
+}
+
+/**
  * Web App entry point: route a request to one maintenance function.
  *
  * Every route is a dry run unless apply=1. Errors are caught and returned as
@@ -3081,6 +3168,10 @@ function linkedinNoiseBackfill_(out, apply, deps)
 function doGet(e)
 {
   const out = [];
+  if (!_authorized_(e, out))
+  {
+    return ContentService.createTextOutput(out.join('\n')).setMimeType(ContentService.MimeType.TEXT);
+  }
   const fn = (e && e.parameter && e.parameter.fn) || 'overlaps';
   const apply = !!(e && e.parameter && e.parameter.apply === '1');
   try
@@ -3220,8 +3311,10 @@ function doGet(e)
   }
   catch (err)
   {
+    // The stack goes to the execution log, not to the response: the caller
+    // gets enough to report the failure, not the internals to probe it.
     out.push('ERROR: ' + err.message);
-    out.push(err.stack || '');
+    Logger.log(err.stack || String(err));
   }
   return ContentService.createTextOutput(out.join('\n')).setMimeType(ContentService.MimeType.TEXT);
 }

@@ -1,0 +1,26 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  mutation:
+    name: unit + mutation tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Runs the .gs suites in a sandboxed scope with the Apps Script globals
+      # stubbed, then breaks each guard in turn to confirm a test catches it.
+      # Exits non-zero if the baseline fails OR if any mutant survives, so a
+      # guard that quietly stops being covered fails the build.
+      #
+      # _private_data.gs is git-ignored; the harness stubs it, so this runs
+      # against a clean checkout.
+      - name: Run tests
+        run: node test/mutation_test.js

@@ -393,6 +393,113 @@ function testMutatingPaths(results)
   const LABELS = [{id: READING, name: 'Reading'}, {id: 'Label_496', name: 'Misc'}];
   const SPEC = [{from: 'a@x.com', label: 'Reading', skipInbox: true}];
 
+  // --- Web App authorisation ---
+
+  /**
+   * Build a fake event object carrying a token parameter.
+   *
+   * @param {string} [token] - Token to present, or omitted for none
+   * @return {Object} Apps Script event-shaped object
+   */
+  function eventWithToken(token)
+  {
+    return token === undefined ? {parameter: {}} : {parameter: {token: token}};
+  }
+
+  runTest('_constantTimeEquals_ matches identical strings', function()
+  {
+    assert(_constantTimeEquals_('abc123', 'abc123'), 'Equal strings must compare equal');
+  }, results);
+
+  runTest('_constantTimeEquals_ rejects differing strings of equal length', function()
+  {
+    assert(!_constantTimeEquals_('abc123', 'abc124'), 'One differing byte must fail');
+  }, results);
+
+  runTest('_constantTimeEquals_ rejects differing lengths and non-strings', function()
+  {
+    assert(!_constantTimeEquals_('abc', 'abcd'), 'Different lengths must fail');
+    assert(!_constantTimeEquals_(null, 'abc'), 'Non-string must fail, not throw');
+    assert(!_constantTimeEquals_('abc', undefined), 'Non-string must fail, not throw');
+  }, results);
+
+  runTest('_authorized_ fails closed when no token is configured', function()
+  {
+    const props = PropertiesService.getScriptProperties();
+    const saved = props.getProperty(_TOKEN_PROPERTY);
+    props.deleteProperty(_TOKEN_PROPERTY);
+    try
+    {
+      const out = [];
+      assert(!_authorized_(eventWithToken('anything'), out),
+        'With no token configured every route must be refused, not opened');
+      assert(out.join('').indexOf('DENIED') !== -1, 'Should say DENIED');
+    }
+    finally
+    {
+      if (saved) { props.setProperty(_TOKEN_PROPERTY, saved); }
+    }
+  }, results);
+
+  runTest('_authorized_ rejects a missing or wrong token', function()
+  {
+    const props = PropertiesService.getScriptProperties();
+    const saved = props.getProperty(_TOKEN_PROPERTY);
+    props.setProperty(_TOKEN_PROPERTY, 'correct-horse-battery-staple');
+    try
+    {
+      assert(!_authorized_(eventWithToken(), []), 'No token must be refused');
+      assert(!_authorized_(eventWithToken(''), []), 'Empty token must be refused');
+      assert(!_authorized_(eventWithToken('wrong'), []), 'Wrong token must be refused');
+      assert(_authorized_(eventWithToken('correct-horse-battery-staple'), []),
+        'The configured token must be accepted');
+    }
+    finally
+    {
+      if (saved) { props.setProperty(_TOKEN_PROPERTY, saved); }
+      else { props.deleteProperty(_TOKEN_PROPERTY); }
+    }
+  }, results);
+
+  runTest('_authorized_ denial leaks nothing about the request', function()
+  {
+    const props = PropertiesService.getScriptProperties();
+    const saved = props.getProperty(_TOKEN_PROPERTY);
+    props.setProperty(_TOKEN_PROPERTY, 'a-real-token');
+    try
+    {
+      const out = [];
+      _authorized_({parameter: {token: 'wrong', fn: 'passFtrash', apply: '1'}}, out);
+      const text = out.join('\n');
+      assertEquals(text, 'DENIED', 'Denial must not echo the route, the token, or a reason');
+    }
+    finally
+    {
+      if (saved) { props.setProperty(_TOKEN_PROPERTY, saved); }
+      else { props.deleteProperty(_TOKEN_PROPERTY); }
+    }
+  }, results);
+
+  runTest('doGet refuses an unauthorised request before routing', function()
+  {
+    // Tests the wiring, not the guard: a correct _authorized_ that doGet never
+    // calls would leave every route wide open, and every other auth test would
+    // still pass.
+    const props = PropertiesService.getScriptProperties();
+    const saved = props.getProperty(_TOKEN_PROPERTY);
+    props.setProperty(_TOKEN_PROPERTY, 'a-real-token');
+    try
+    {
+      const body = doGet({parameter: {fn: 'counts', apply: '1'}}).getContent();
+      assertEquals(body, 'DENIED', 'doGet must deny before dispatching to any route');
+    }
+    finally
+    {
+      if (saved) { props.setProperty(_TOKEN_PROPERTY, saved); }
+      else { props.deleteProperty(_TOKEN_PROPERTY); }
+    }
+  }, results);
+
   // --- dependency injection guards ---
 
   runTest('_dep_ keeps a falsy but valid injected value', function()
