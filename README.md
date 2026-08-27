@@ -34,6 +34,9 @@ repo, because it holds personal data. Without that file the toolkit will raise a
 configuration must stop the run rather than silently do nothing. The rest of the
 library works without it.
 
+See [Toolkit setup](#toolkit-setup-optional) if you intend to deploy it, and
+[SECURITY.md](SECURITY.md) for what it can reach.
+
 ### 3. Authorize
 
 Run any function (e.g. `quickStats`). Google will prompt for Gmail access — click through and allow it.
@@ -156,6 +159,37 @@ showProgress();
 | `deleteEmptyLabels(dryRun)` | Remove empty labels |
 | `findDuplicateLabels()` | Find similar-looking labels |
 | `exportLabelStructure()` | Export label structure as JSON |
+
+## Toolkit setup (optional)
+
+Skip this unless you are deploying `reorg_toolkit.gs` as a Web App. The library
+does not need any of it.
+
+The toolkit runs behind a shared secret, and **fails closed** — until you mint a
+token, every route returns `DENIED`. Both setup functions live in `admin.gs`,
+kept out of the 3,000-line toolkit so they are easy to find in the editor's Run
+menu.
+
+**1. Mint a token.** Select `admin.gs`, run `setWebAppToken()`, and keep what it
+returns. It is shown once.
+
+```
+https://script.google.com/macros/s/<deployment>/exec?fn=counts&token=<token>
+```
+
+Every route needs `&token=`. Every mutating route is a dry run until you add
+`&apply=1`. Rotating is the same function again — the old token dies instantly.
+
+**2. Schedule the upkeep.** Run `installMaintenanceTrigger()` once. It installs a
+daily trigger that labels any inbox thread carrying no plan label, running
+*inside* the project rather than over HTTP, so it needs no token and no machine
+awake. It labels only; it never archives or trashes. Running it twice replaces
+the trigger rather than stacking a second one.
+
+`removeMaintenanceTrigger()` undoes it.
+
+> The Apps Script editor does not refresh after a `clasp push`. If a file or
+> function appears to be missing, hard-reload the tab before believing it.
 
 ## Tests
 

@@ -10,8 +10,13 @@
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/name`
-3. Test thoroughly (run `runAllTests()`)
-4. Submit a Pull Request with a description of what, why, and how it was tested
+3. Test thoroughly:
+   - `runAllTests()` from the Apps Script editor, or `?fn=selftest` on a deployment
+   - `node test/mutation_test.js` from a clone — this is what CI enforces
+4. If you touch a guard (an early return, a permission check, a dry-run branch),
+   add a mutation for it. A `SURVIVED` line means that guard is not really
+   covered, and the build fails on it
+5. Submit a Pull Request with a description of what, why, and how it was tested
 
 ## Code Style
 
@@ -20,7 +25,11 @@
 - JSDoc on all public functions (`@param`, `@return`)
 - Use `Object.keys()` rather than `for...in`
 - Batch all Gmail API calls — never operate per-thread in a loop
-- Allman brace style (opening brace on its own line)
+- Allman brace style (opening brace on its own line), including object literals
+  and anonymous functions; no single-line blocks
+- Anonymous functions are `function(x)`, with no space before the paren
+- Name magic numbers. If two call sites need different limits, say why in a comment
+- Never key an object on data from a message header without `Object.create(null)`
 
 ## Privacy
 
