@@ -13,7 +13,7 @@ A Google Apps Script library for backing up, analyzing, and reorganizing Gmail l
 
 ### 2. Add the script files
 
-Go to File > New > Script and create these four files. Paste the contents from this repo into each one.
+Go to File > New > Script and create these files. Paste the contents from this repo into each one.
 
 | File | Purpose |
 |------|---------|
@@ -21,8 +21,18 @@ Go to File > New > Script and create these four files. Paste the contents from t
 | `backup.gs` | Backup functions |
 | `analysis.gs` | Label analysis |
 | `reorganization.gs` | Migration execution |
+| `tests.gs` | Test suite (optional) |
+| `reorg_toolkit.gs` | Web App toolkit for one-off sweeps (optional) |
 
 `utils.gs` must be the first file listed in your project.
+
+`reorg_toolkit.gs` is a separate, more ad-hoc layer: a `doGet` router exposing
+one-off maintenance routes over HTTP. It reads its configuration — sender rules,
+label names, thread IDs — from a `_private_data.gs` file that is **not** in this
+repo, because it holds personal data. Without that file the toolkit will raise a
+`ReferenceError` naming the missing constant, which is deliberate: an absent
+configuration must stop the run rather than silently do nothing. The rest of the
+library works without it.
 
 ### 3. Authorize
 
@@ -146,6 +156,29 @@ showProgress();
 | `deleteEmptyLabels(dryRun)` | Remove empty labels |
 | `findDuplicateLabels()` | Find similar-looking labels |
 | `exportLabelStructure()` | Export label structure as JSON |
+
+## Tests
+
+```
+node test/mutation_test.js    # from a clone; no Apps Script needed
+```
+
+`tests.gs` holds the suite. Two ways to run it:
+
+| How | What it covers |
+|-----|----------------|
+| `runAllTests()` from the Apps Script editor | Everything; results go to the log |
+| `?fn=selftest` on the deployed Web App | Everything; returns a pass/fail summary |
+| `node test/mutation_test.js` | Breaks one guard at a time and checks a test catches it |
+
+The mutation runner is the one worth knowing about. A green suite only means
+something if it fails when the code breaks, so it deliberately introduces a
+defect into each guard in turn and asserts the expected test fails. A `SURVIVED`
+line means that guard is not really covered. Run it after touching any guard.
+
+It loads the `.gs` files into a sandboxed scope with the Apps Script globals
+stubbed, so it never touches Gmail, and it stubs the private configuration too —
+so it runs from a clean clone.
 
 ## Configuration
 

@@ -15,10 +15,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New `CONFIG.MAX_RETRIES` (default 4) and `CONFIG.RETRY_BASE_DELAY_MS` (default 1000) knobs
 - **Retry telemetry** surfaced in batch summary as `Transient errors retried: N`
 - Test suite `testRetryHelpers` in `tests.gs` covering classification, success/failure paths, budget enforcement, and telemetry
+- **`reorg_toolkit.gs`** — Web App toolkit for one-off maintenance sweeps, exposed through a `doGet` router. Every mutating route is dry-run by default and takes `&apply=1`, and all of them are idempotent, checkpointed and time-budgeted
+- **Injectable Gmail gateway** (`_GW`, `_dep_`, `_depGw_`) so the mutating routes can be tested against a fake without touching a mailbox. `_depGw_` throws if a caller supplies `deps` without a gateway, rather than silently falling through to live Gmail
+- **Static filter-conflict detection** — Gmail runs every matching filter, so overlapping criteria double-label. `_specConflicts_` catches that before anything is written and aborts an `&apply=1` run
+- **Hand-edit protection** — `rebuildfilters` never overwrites a filter someone edited by hand; `&force=1` overrides
+- Test suites `testFilterSpec` and `testMutatingPaths` in `tests.gs` (40 cases), using injected fixtures so they run without the private configuration file
+- `test/mutation_test.js` — mutation runner that breaks one guard at a time and asserts a test catches it
+- `?fn=selftest` route to run the whole suite over HTTP
+- `.claspignore` to keep `test/` out of the Apps Script push
 
 ### Changed
 - `applyLabelToThreads` and `removeOldLabel` now accept `batchStats` and route through `withRetry`
 - `createBatchStats()` includes a `retries` counter
+- Toolkit configuration (sender rules, label taxonomy, thread IDs) is separated into a git-ignored `_private_data.gs`, so the logic is reviewable. A missing configuration file raises rather than degrading into an empty run
 
 ### Planned
 - Google Sheets UI for configuration
