@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **README "Label colors" section** - one hue per group, sub-labels match the parent, and the parent-label requirement for sidebar nesting
 - **Transient-error retry helper** (`withRetry`, `isTransientError` in `utils.gs`)
   - Exponential backoff with jitter for 503/500/429/rate-limit/timeout errors
   - Time-budget aware: aborts a retry instead of pushing past `MAX_RUNTIME_MS`

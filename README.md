@@ -252,6 +252,28 @@ newLabels: [
 ]
 ```
 
+## Label colors
+
+Colors are optional and cosmetic: they change how labels look, never which mail
+they hold. Gmail offers a fixed set of preset tiles; there is no custom color.
+
+- **One hue per top-level group.** Sub-labels take their parent's color, so a
+  group reads as one block in the sidebar and on message chips.
+- **Seven or eight hues at most.** Past that the eye stops telling them apart.
+  Check neighbors: orange beside yellow and red beside brown blur together.
+- **Reserve red for conflict.** If red appears on ordinary labels it stops meaning
+  anything.
+- **Gray for low-attention buckets** such as a catch-all `Misc`.
+- **Leave tool-managed labels alone.** Labels owned by another tool keep whatever
+  color that tool gave them.
+
+Gmail only nests `Foo/Bar` under `Foo` in the sidebar if a label named exactly
+`Foo` exists. Without one, the sidebar shows the full `Foo/Bar` text flat. Create
+an empty parent label for each group.
+
+A preset color cannot be cleared through the API; the nearest is the White preset.
+To remove a color completely, use "Remove color" in the Gmail label menu.
+
 ## Troubleshooting
 
 **"Exceeded maximum execution time"** — Normal for large mailboxes. Run `main()` again and it will resume automatically.
