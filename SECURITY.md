@@ -44,7 +44,8 @@ https://script.google.com/macros/s/<deployment>/exec?fn=counts&token=<token>
 
 - The token lives in the Script Property `WEBAPP_TOKEN`, never in source.
 - `setWebAppToken()` in `admin.gs` mints one from `Utilities.getUuid()`
-  (`SecureRandom`-backed, 244 bits) and returns it once.
+  (`SecureRandom`-backed, 244 bits) and writes it to the execution log, the only
+  place it appears.
 - **It fails closed.** With no token configured, every route is refused rather
   than left open.
 - Comparison is constant-time, and a denial returns the bare string `DENIED`
@@ -80,7 +81,7 @@ telemetry, no external API calls.
 `createBackup` writes every subject and sender to a Sheet. That is a standing
 copy of your mailbox metadata outside Gmail; delete it when you are done with it.
 
-Configuration containing personal data (sender rules, label names, thread ids)
+Configuration containing personal data (sender rules, label names)
 lives in `_private_data.gs`, which is git-ignored and has never been committed.
 
 ## Reporting a vulnerability

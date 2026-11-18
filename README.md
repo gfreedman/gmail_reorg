@@ -21,8 +21,10 @@ Go to File > New > Script and create these files. Paste the contents from this r
 | `backup.gs` | Backup functions |
 | `analysis.gs` | Label analysis |
 | `reorganization.gs` | Migration execution |
+| `examples.gs` | Ready-to-run example scripts (optional) |
 | `tests.gs` | Test suite (optional) |
 | `reorg_toolkit.gs` | Web App toolkit for upkeep and diagnostics (optional) |
+| `admin.gs` | Toolkit setup functions you run by hand (optional, needs `reorg_toolkit.gs`) |
 
 `utils.gs` must be the first file listed in your project.
 
@@ -67,7 +69,7 @@ The report shows label counts, empty labels, likely duplicates, and suggested gr
 Edit `ORGANIZATION_PLAN` in `reorganization.gs`:
 
 ```javascript
-var ORGANIZATION_PLAN = {
+const ORGANIZATION_PLAN = {
   newLabels: [
     'Personal',
     'Personal/Family',
@@ -168,7 +170,8 @@ The toolkit runs behind a shared secret and fails closed: until you mint a token
 every route returns `DENIED`. Both setup functions live in `admin.gs`.
 
 **1. Mint a token.** Select `admin.gs` in the editor, run `setWebAppToken()`, and
-keep what it returns. It is shown once.
+copy the token from the execution log. The editor's Run button discards return
+values, so the log is the only place it appears.
 
 ```
 https://script.google.com/macros/s/<deployment>/exec?fn=counts&token=<token>
@@ -208,12 +211,14 @@ Gmail, and it stubs the private configuration too.
 Edit `CONFIG` in `reorganization.gs`:
 
 ```javascript
-var CONFIG = {
-  DRY_RUN: true,          // set false only when ready to run live
-  BATCH_SIZE: 100,        // threads per batch — reduce if hitting rate limits
-  MAX_RUNTIME_MS: 300000, // stops before the 6-minute Apps Script limit
-  SKIP_COMPLETED: true,   // skips migrations already done
-  VERBOSE: true           // detailed logging
+const CONFIG = {
+  DRY_RUN: true,            // set false only when ready to run live
+  BATCH_SIZE: 100,          // threads per batch — reduce if hitting rate limits
+  MAX_RUNTIME_MS: 300000,   // stops before the 6-minute Apps Script limit
+  SKIP_COMPLETED: true,     // skips migrations already done
+  VERBOSE: true,            // detailed logging
+  MAX_RETRIES: 4,           // retries per batch for 503/429/timeouts
+  RETRY_BASE_DELAY_MS: 1000 // first backoff; doubles each retry, plus jitter
 };
 ```
 
@@ -303,8 +308,8 @@ notifications are filed and hidden. Anything a person typed is filed and left in
 the inbox. Burying a message from a person costs far more than leaving a
 newsletter visible, so the rule is asymmetric.
 
-**Logic is committed, configuration is not.** Sender rules, label names and
-thread ids live in a git-ignored file; the code that reads them is in the repo.
+**Logic is committed, configuration is not.** Sender rules and label names
+live in a git-ignored file; the code that reads them is in the repo.
 Personal data never enters git, and a missing configuration raises straight away
 instead of producing a run that does nothing and reports success.
 

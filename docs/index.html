@@ -440,13 +440,13 @@
     <div class="container">
       <p class="eyebrow">Your emails are safe</p>
       <h2>Nothing moves until you say so</h2>
-      <p class="section-sub">Every run begins in dry-run mode. Your label structure is backed up before the first thread moves.</p>
+      <p class="section-sub">Every run begins in dry-run mode, and the workflow starts with a backup of your labels before any thread moves.</p>
 
       <div class="scorecard">
         <div class="score-row">
           <span class="score-badge badge-safe">Email read-only</span>
           <span class="score-label">1. Backup</span>
-          <span class="score-desc">Writes a spreadsheet to Drive. Never touches your emails.</span>
+          <span class="score-desc">Writes a spreadsheet to Drive. Never changes your emails.</span>
         </div>
         <div class="score-row">
           <span class="score-badge badge-safe">Read-only</span>
@@ -717,7 +717,7 @@ showProgress();"
           <summary>Will this delete any of my emails?
             <span class="faq-icon" aria-hidden="true">+</span>
           </summary>
-          <p class="faq-answer">No. The script only adds and removes labels on threads. Emails are never deleted and never read. Your content stays exactly where it is.</p>
+          <p class="faq-answer">No. The script only adds and removes labels on threads, so emails are never deleted and stay exactly where they are. Moving labels never opens a message. The optional backup records each thread's subject and sender to a spreadsheet in your own Drive.</p>
         </details>
 
         <details>
