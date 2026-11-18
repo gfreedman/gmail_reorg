@@ -19,7 +19,7 @@
 const _TOKEN_PROPERTY = 'WEBAPP_TOKEN';
 
 /**
- * Generate and store a new Web App token, returning it once.
+ * Generate and store a new Web App token, and write it to the execution log.
  *
  * Run from the Apps Script editor. Rotating is simply running it again: the old
  * token stops working immediately, which is the response to a leaked URL.
@@ -31,7 +31,10 @@ const _TOKEN_PROPERTY = 'WEBAPP_TOKEN';
  * standing between the deployment URL and full mailbox access. Two UUIDs give
  * 244 bits of entropy.
  *
- * @return {string} The new token. Copy it now; it is not displayed again.
+ * The execution log keeps a copy of the token. Treat that log like the token
+ * itself; rotating replaces the token, so an old copy in the log stops working.
+ *
+ * @return {string} The new token.
  */
 function setWebAppToken()
 {
@@ -97,7 +100,7 @@ const _GW =
 const _MAINTENANCE_HANDLER = 'runMaintenance';
 
 /**
- * Label any inbox thread that carries no plan label.
+ * Label any inbox thread that carries no label other than the spam tool's.
  *
  * This is what the time-driven trigger calls. It runs inside the project rather
  * than over HTTP, so it needs no Web App token and no machine to be awake — the

@@ -59,6 +59,8 @@ const CATEGORY_PATTERNS =
 /**
  * Analyze current label structure and provide comprehensive insights.
  * This is the main entry point for understanding your Gmail organization.
+ *
+ * @return {Array<Object>} Label data collected for the report.
  */
 function analyzeLabelStructure()
 {
@@ -181,8 +183,8 @@ function displayTopLabels(labelData)
     return b.threadCount - a.threadCount;
   });
 
-  Logger.log('=== TOP 20 LABELS BY THREAD COUNT ===');
-  for (let i = 0; i < Math.min(20, sorted.length); i++)
+  Logger.log('=== TOP ' + CONSTANTS.TOP_LABELS_COUNT + ' LABELS BY THREAD COUNT ===');
+  for (let i = 0; i < Math.min(CONSTANTS.TOP_LABELS_COUNT, sorted.length); i++)
   {
     const label = sorted[i];
     const categoryTag = label.suggestedCategory ? ' [' + label.suggestedCategory + ']' : '';
@@ -275,7 +277,7 @@ function displayPotentialDuplicates(labelData)
   const duplicates = [];
   // Null-prototype map: the keys below come from message headers or label names,
   // which are outside our control. On a plain object a key of __proto__ or
-  // constructor resolves to something on Object.prototype instead of a own
+  // constructor resolves to something on Object.prototype instead of an own
   // property, silently corrupting the tally.
   const seen = Object.create(null);
 
@@ -359,13 +361,13 @@ function suggestConsolidations(labelData)
   // Find labels with very few threads
   const lowUsage = labelData.filter(function(l)
   {
-    return l.threadCount > 0 && l.threadCount < 5;
+    return l.threadCount > 0 && l.threadCount < CONSTANTS.LOW_USAGE_THRESHOLD;
   });
 
   if (lowUsage.length > 0)
   {
-    Logger.log('Labels with very few threads (1-4):');
-    for (let i = 0; i < Math.min(10, lowUsage.length); i++)
+    Logger.log('Labels with very few threads (1-' + (CONSTANTS.LOW_USAGE_THRESHOLD - 1) + '):');
+    for (let i = 0; i < Math.min(CONSTANTS.MAX_DISPLAY_ITEMS, lowUsage.length); i++)
     {
       Logger.log('  "' + lowUsage[i].name + '" (' + lowUsage[i].threadCount + ' threads)');
     }
@@ -386,10 +388,8 @@ function suggestConsolidations(labelData)
 function displayCategoryAnalysis(labelData)
 {
   // Group labels by detected category
-  // Null-prototype map: the keys below come from message headers or label names,
-  // which are outside our control. On a plain object a key of __proto__ or
-  // constructor resolves to something on Object.prototype instead of a own
-  // property, silently corrupting the tally.
+  // Null-prototype map keyed on category names, so a key can never collide with
+  // something on Object.prototype such as __proto__ or constructor.
   const categories = Object.create(null);
 
   for (let i = 0; i < labelData.length; i++)
@@ -437,10 +437,11 @@ function displayCategoryAnalysis(labelData)
 }
 
 /**
- * Propose a clean organization structure based on analysis.
- * Provides a recommended template for reorganization.
+ * Print a recommended starting structure for reorganization.
  *
- * @param {Array} labelData - Label data array
+ * The template is fixed; it does not depend on labelData.
+ *
+ * @param {Array} labelData - Label data array (currently unused)
  */
 function proposeOrganization(labelData)
 {
@@ -551,7 +552,7 @@ function generateMigrationTemplate()
   Logger.log('');
   Logger.log('Copy and customize this for your reorganization.gs:');
   Logger.log('');
-  Logger.log('var ORGANIZATION_PLAN = {');
+  Logger.log('const ORGANIZATION_PLAN = {');
   Logger.log('  newLabels: [');
   Logger.log('    // Add your new label structure here');
   Logger.log('    "Personal",');

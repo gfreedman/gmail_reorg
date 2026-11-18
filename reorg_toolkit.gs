@@ -248,7 +248,7 @@ function diagnoseOrphans_(out)
   const all = sample.concat(sample2);
   // Null-prototype map: the keys below come from message headers or label names,
   // which are outside our control. On a plain object a key of __proto__ or
-  // constructor resolves to something on Object.prototype instead of a own
+  // constructor resolves to something on Object.prototype instead of an own
   // property, silently corrupting the tally.
   const counts = Object.create(null);
   all.forEach(function(t)
@@ -298,7 +298,7 @@ function inspectSenders_(out, domain)
   const MAX_SAMPLE = 250;
   // Null-prototype map: the keys below come from message headers or label names,
   // which are outside our control. On a plain object a key of __proto__ or
-  // constructor resolves to something on Object.prototype instead of a own
+  // constructor resolves to something on Object.prototype instead of an own
   // property, silently corrupting the tally.
   const counts = Object.create(null);
   let total = 0;
@@ -383,7 +383,7 @@ function inspectCategory_(out, cat)
   out.push('Total threads: ' + all.length);
   // Null-prototype map: the keys below come from message headers or label names,
   // which are outside our control. On a plain object a key of __proto__ or
-  // constructor resolves to something on Object.prototype instead of a own
+  // constructor resolves to something on Object.prototype instead of an own
   // property, silently corrupting the tally.
   const counts = Object.create(null);
   all.forEach(function(t)
@@ -436,7 +436,7 @@ function _passF_dest(fromAddr, allRules)
 }
 
 /**
- * Pass F: file mail the spam tool has seen but that carries no plan label.
+ * Pass F: file mail the spam tool has seen but that carries no other user label.
  *
  * Runs on an offset checkpoint so a long backlog can be worked through across
  * several invocations.
@@ -463,7 +463,7 @@ function passF_(out, apply)
   const allRules = [].concat(_MISC_TO, _PASS_F_RULES, _PASS_B_RULES, _PASS_C_LABEL_RULES, _PASS_D_LABEL_RULES);
   // Null-prototype map: the keys below come from message headers or label names,
   // which are outside our control. On a plain object a key of __proto__ or
-  // constructor resolves to something on Object.prototype instead of a own
+  // constructor resolves to something on Object.prototype instead of an own
   // property, silently corrupting the tally.
   const dstCache = Object.create(null);
   const getDst = function(name)
@@ -473,7 +473,9 @@ function passF_(out, apply)
   };
 
   const props = PropertiesService.getScriptProperties();
-  // Offset is stable across runs: we never remove SpamChecked, so the set doesn't shift.
+  // Resume point between runs. Approximate: new SpamChecked mail lands at the
+  // front and shifts the list, so threads that arrive between runs are only
+  // reached after passFreset. Re-running is safe because filed threads are skipped.
   let offset = apply ? parseInt(props.getProperty('passF_offset') || '0', 10) : 0;
   const PAGE = _LABEL_PAGE_SIZE;
   let captured = 0;
@@ -588,7 +590,8 @@ function passF_(out, apply)
 // org label (routing via the same rules as Pass F, Misc fallback). Keeps everything
 // in the inbox — never archives. Idempotent: already-labeled threads are skipped.
 /**
- * Label inbox threads that carry no plan label. Labels only; never archives.
+ * Label inbox threads that carry no label other than the spam tool's. Labels
+ * only; never archives.
  *
  * @param {Array<string>} out - Accumulator for output lines; returned to the caller as text.
  * @param {boolean} apply - False for a dry run that only reports; true to execute.
@@ -605,7 +608,7 @@ function passInbox_(out, apply)
   const allRules = [].concat(_MISC_TO, _PASS_F_RULES, _PASS_B_RULES, _PASS_C_LABEL_RULES, _PASS_D_LABEL_RULES);
   // Null-prototype map: the keys below come from message headers or label names,
   // which are outside our control. On a plain object a key of __proto__ or
-  // constructor resolves to something on Object.prototype instead of a own
+  // constructor resolves to something on Object.prototype instead of an own
   // property, silently corrupting the tally.
   const dstCache = Object.create(null);
   const getDst = function(name)

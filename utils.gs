@@ -33,13 +33,13 @@ const RESERVED_LABELS =
 ];
 
 /**
- * Characters not allowed in Gmail label names
- * Gmail will reject labels containing these
+ * Characters this library refuses in label names. validateLabelName rejects
+ * any name containing one.
  */
 const INVALID_LABEL_CHARS = ['&', '<', '>', '[', ']', '{', '}'];
 
 /**
- * Numeric constants - avoid magic numbers throughout codebase
+ * Numeric constants shared across the library.
  */
 const CONSTANTS =
 {
@@ -57,10 +57,12 @@ const CONSTANTS =
 
 /**
  * Get all threads from a label, handling pagination automatically.
- * This is the ONLY function that should be used to retrieve threads.
+ * Use this for any full read of a label; direct getThreads() calls elsewhere
+ * fetch a single page on purpose.
  *
  * @param {GmailLabel|string|null|undefined} labelOrName - The label object or label name string
- * @return {GmailThread[]} All threads with this label, or empty array on error
+ * @return {GmailThread[]} Threads with this label. If a page fails to load, the
+ *     error is logged and the threads fetched so far are returned.
  */
 function getAllThreadsFromLabel(labelOrName)
 {
@@ -386,7 +388,7 @@ function clearMigrationState()
 
 /**
  * Mark a migration as completed.
- * Uses retry logic to handle concurrent modifications.
+ * Retries the state write if it throws; there is no lock.
  *
  * @param {string} fromLabel - Source label name
  * @param {string} toLabel - Destination label name
@@ -728,7 +730,7 @@ function validateOrganizationPlan(plan)
   // Check for duplicate migrations (same source label twice)
   // Null-prototype map: the keys below come from message headers or label names,
   // which are outside our control. On a plain object a key of __proto__ or
-  // constructor resolves to something on Object.prototype instead of a own
+  // constructor resolves to something on Object.prototype instead of an own
   // property, silently corrupting the tally.
   const seenFrom = Object.create(null);
   for (let i = 0; i < plan.migrations.length; i++)
@@ -754,6 +756,8 @@ function validateOrganizationPlan(plan)
 
 /**
  * List all labels with detailed information (name and thread count).
+ *
+ * @return {Array<Object>} Label data, sorted by name.
  */
 function listAllLabelsDetailed()
 {
@@ -800,7 +804,7 @@ function findDuplicateLabels()
   const labels = GmailApp.getUserLabels();
   // Null-prototype map: the keys below come from message headers or label names,
   // which are outside our control. On a plain object a key of __proto__ or
-  // constructor resolves to something on Object.prototype instead of a own
+  // constructor resolves to something on Object.prototype instead of an own
   // property, silently corrupting the tally.
   const seen = Object.create(null);
   const duplicates = [];
@@ -874,6 +878,7 @@ function exportLabelStructure()
  * Use dryRun=true to preview, dryRun=false to actually delete.
  *
  * @param {boolean} dryRun - If true, only report what would be deleted
+ * @return {number} How many empty labels were found (and deleted, unless dryRun).
  */
 function deleteEmptyLabels(dryRun)
 {

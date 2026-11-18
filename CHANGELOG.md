@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI** - `.github/workflows/tests.yml` runs the unit and mutation suites on push and pull request
 
 ### Changed
+- `setWebAppToken()` writes the new token to the execution log, because the editor's Run button discards return values. The log keeps that copy until the token is rotated
 - Requests with no `fn` now return `Unknown fn` instead of running the `overlaps` report
 - `applyLabelToThreads` and `removeOldLabel` now accept `batchStats` and route through `withRetry`
 - `createBatchStats()` includes a `retries` counter

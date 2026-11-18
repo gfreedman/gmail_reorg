@@ -15,8 +15,9 @@ jobs:
         with:
           node-version: '20'
 
-      # Runs the .gs suites in a sandboxed scope with the Apps Script globals
-      # stubbed, then breaks each guard in turn to confirm a test catches it.
+      # Runs the two toolkit suites from tests.gs in a sandboxed scope with the
+      # Apps Script globals stubbed, then breaks each toolkit guard in turn to
+      # confirm a test catches it.
       # Exits non-zero if the baseline fails OR if any mutant survives, so a
       # guard that quietly stops being covered fails the build.
       #

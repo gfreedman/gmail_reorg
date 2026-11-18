@@ -16,7 +16,8 @@ Can access your Gmail labels and threads, create Sheets in your Drive for
 backups, and store state in Script Properties.
 
 Cannot send data to external servers, reach other Google accounts, read or
-change your password, or delete messages. It moves labels; that is all.
+change your password, or delete messages. It creates, applies and removes labels,
+and can delete labels that hold no mail; that is all.
 
 ## What the toolkit can do
 
@@ -45,7 +46,8 @@ https://script.google.com/macros/s/<deployment>/exec?fn=counts&token=<token>
 - The token lives in the Script Property `WEBAPP_TOKEN`, never in source.
 - `setWebAppToken()` in `admin.gs` mints one from `Utilities.getUuid()`
   (`SecureRandom`-backed, 244 bits) and writes it to the execution log, the only
-  place it appears.
+  place it appears. The log keeps that copy, so treat it like the token; rotating
+  makes old copies useless.
 - **It fails closed.** With no token configured, every route is refused rather
   than left open.
 - Comparison is constant-time, and a denial returns the bare string `DENIED`
@@ -78,7 +80,9 @@ Processing happens inside your Google account. Backups are Sheets created in you
 own Drive, private to you; nothing is shared automatically. No analytics, no
 telemetry, no external API calls.
 
-`createBackup` writes every subject and sender to a Sheet. That is a standing
+`createBackup` writes each labelled thread's ID, subject, sender, date and labels
+to a Sheet. If you turn on `BACKUP_CONFIG.INCLUDE_BODY_PREVIEW` (off by default),
+it also reads each thread's first message and saves its first 100 characters. That is a standing
 copy of your mailbox metadata outside Gmail; delete it when you are done with it.
 
 Configuration containing personal data (sender rules, label names)

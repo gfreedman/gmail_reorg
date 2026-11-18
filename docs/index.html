@@ -466,7 +466,7 @@
       </div>
 
       <div class="callout">
-        <p><strong>Need to undo a migration?</strong> The script only adds and removes labels. Emails are never deleted. To reverse any migration, swap <code>from</code> and <code>to</code> in your plan and run again.</p>
+        <p><strong>Need to undo a migration?</strong> The script only adds and removes labels on threads. Emails are never deleted. To reverse any migration, swap <code>from</code> and <code>to</code> in your plan and run again.</p>
       </div>
     </div>
   </section>
@@ -546,7 +546,7 @@
           <div class="step-num">2</div>
           <div class="step-content">
             <h3>Add the four script files</h3>
-            <p>Go to File &gt; New &gt; Script. Create four files in this exact order and paste the contents from GitHub into each.</p>
+            <p>Click <strong>+</strong> next to <strong>Files</strong> and choose <strong>Script</strong>. Create four files in this exact order and paste the contents from GitHub into each.</p>
             <div class="term">
               <div class="term-bar">
                 <span class="term-dot"></span>
@@ -695,6 +695,7 @@ showProgress();"
             <li>Clients/Active</li>
             <li>Clients/Past</li>
             <li>Projects/Active</li>
+            <li>Projects/Completed</li>
             <li>Admin/Invoices</li>
             <li>Admin/Contracts</li>
             <li>Admin/Taxes</li>
@@ -717,7 +718,7 @@ showProgress();"
           <summary>Will this delete any of my emails?
             <span class="faq-icon" aria-hidden="true">+</span>
           </summary>
-          <p class="faq-answer">No. The script only adds and removes labels on threads, so emails are never deleted and stay exactly where they are. Moving labels never opens a message. The optional backup records each thread's subject and sender to a spreadsheet in your own Drive.</p>
+          <p class="faq-answer">No. The script only adds and removes labels on threads, so emails are never deleted and stay exactly where they are. Moving labels never opens a message. The optional backup records each labelled thread's ID, subject, sender, date and labels to a spreadsheet in your own Drive; a body preview is off unless you turn it on.</p>
         </details>
 
         <details>
@@ -773,7 +774,7 @@ showProgress();"
         </div>
         <div class="limit-item">
           <div class="limit-dot" aria-hidden="true"></div>
-          <p>Label names cannot contain <code>&lt; &gt; &amp;</code> or similar special characters. That's a Gmail restriction, not this script's.</p>
+          <p>This script refuses label names containing <code>&amp; &lt; &gt; [ ] { }</code>.</p>
         </div>
         <div class="limit-item">
           <div class="limit-dot" aria-hidden="true"></div>
