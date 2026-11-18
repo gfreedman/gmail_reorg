@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Injectable Gmail gateway** (`_GW`, `_dep_`, `_depGw_`) so the mutating routes can be tested against a fake without touching a mailbox. `_depGw_` throws if a caller supplies `deps` without a gateway, rather than silently falling through to live Gmail
 - **Static filter-conflict detection** — Gmail runs every matching filter, so overlapping criteria double-label. `_specConflicts_` catches that before anything is written and aborts an `&apply=1` run
 - **Hand-edit protection** — `rebuildfilters` never overwrites a filter someone edited by hand; `&force=1` overrides
-- Test suites `testFilterSpec` and `testMutatingPaths` in `tests.gs` (37 cases), using injected fixtures so they run without the private configuration file
+- Test suites `testFilterSpec` and `testMutatingPaths` in `tests.gs` (52 cases), using injected fixtures so they run without the private configuration file
 - `test/mutation_test.js` — mutation runner that breaks one guard at a time and asserts a test catches it
 - `?fn=selftest` route to run the whole suite over HTTP
 - `.claspignore` to keep `test/` out of the Apps Script push
