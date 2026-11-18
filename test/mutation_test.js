@@ -61,24 +61,10 @@ const MUTATIONS = [
   ['unmanaged removes dropped',
    "const removes = (sp.skipInbox ? ['INBOX'] : []).concat(carried);", "const removes = (sp.skipInbox ? ['INBOX'] : []);",
    ['preserves unmanaged removeLabelIds']],
-  // Anchored on the gw.deleteLabel(src) call that follows, because three
-  // separate functions contain an identical `remaining.length === 0` check and a
-  // looser anchor silently mutates the wrong one.
-  ['non-empty source deleted anyway',
-   "if (remaining.length === 0) { _safeCall(function() { gw.deleteLabel(src);",
-   "if (true) { _safeCall(function() { gw.deleteLabel(src);",
-   ['keeps a source that still has threads']],
-  ['empty-shell guard removed',
-   "if (label.getThreads(0, 1).length > 0) { out.push('NOT deleting ' + name + ' — still has threads'); continue; }",
-   "if (false) { continue; }",
-   ['deletes an empty shell but not a populated one']],
   ['superseded deletion skipped',
    "    if (!apply) { out.push('WOULD DELETE ' + label + '  (' + stale.id + ')'); continue; }",
    "    if (true) { continue; }",
    ['deletes a superseded filter']],
-  ['dry-run guard removed in mergeDrift',
-   "if (!apply) { out.push('WOULD MOVE ' + threads.length + '+ from ' + srcName + ' -> ' + dstName); break; }", "if (false) { break; }",
-   ['mergeDrift_ dry-run writes nothing']],
 ];
 
 /**
@@ -108,9 +94,7 @@ function runSuite(sources) {
   // read; they exist only to satisfy the eager argument evaluation in _dep_.
   const PRIVATE_STUBS = [
     'const _FILTER_SPEC = [];',
-    'const _FILTER_SUPERSEDED = [];',
-    'const _DRIFT_MERGES = [];',
-    'const _DRIFT_SHELLS = [];'
+    'const _FILTER_SUPERSEDED = [];'
   ].join('\n');
 
   const privPath = R + '_private_data.gs';

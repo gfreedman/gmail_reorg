@@ -22,12 +22,12 @@ Go to File > New > Script and create these files. Paste the contents from this r
 | `analysis.gs` | Label analysis |
 | `reorganization.gs` | Migration execution |
 | `tests.gs` | Test suite (optional) |
-| `reorg_toolkit.gs` | Web App toolkit for one-off sweeps (optional) |
+| `reorg_toolkit.gs` | Web App toolkit for upkeep and diagnostics (optional) |
 
 `utils.gs` must be the first file listed in your project.
 
-`reorg_toolkit.gs` is a separate layer: a `doGet` router exposing one-off
-maintenance routes over HTTP. Its configuration lives in `_private_data.gs`,
+`reorg_toolkit.gs` is a separate layer: a `doGet` router exposing
+maintenance and diagnostic routes over HTTP. Its configuration lives in `_private_data.gs`,
 which holds personal sender rules and label names and so is not in this repo.
 Without that file the toolkit raises a `ReferenceError` naming the missing
 constant, so an absent configuration stops the run instead of quietly doing

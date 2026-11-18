@@ -7,8 +7,8 @@ what the [front page](https://gfreedman.github.io/gmail_reorg/) documents. It ru
 from the Apps Script editor, changes labels only, and never deletes a message.
 
 **The toolkit** (`reorg_toolkit.gs`, `admin.gs`) is a maintenance layer deployed
-as a Web App and driven over HTTP. It can trash mail. Read it before running it
-against your own account.
+as a Web App and driven over HTTP. It can relabel mail and rewrite your Gmail
+filters. Read it before running it against your own account.
 
 ## What the library can and cannot do
 
@@ -22,12 +22,13 @@ change your password, or delete messages. It moves labels; that is all.
 
 Everything above, plus:
 
-- **Trash messages.** `preReorgCleanup_` and `passFtrash` move mail to Trash.
-  Both default to a dry run and require `&apply=1` to act.
+- **Rewrite Gmail filters.** `?fn=rebuildfilters` creates and deletes delivery
+  filters to match the configured spec. Dry run by default; `&apply=1` to act.
 - **Serve mailbox data over HTTP.** `?fn=backup` returns every label and thread
   id as text; the diagnostics return sender domains and counts.
 
-Every mutating route is dry-run by default, idempotent, and re-runnable.
+Every mutating route is idempotent and re-runnable, and dry-run by default except
+`passFreset`, which only clears `passF`'s saved place.
 
 ## Web App access control
 

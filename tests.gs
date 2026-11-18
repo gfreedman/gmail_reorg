@@ -303,77 +303,19 @@ function testFilterSpec(results)
 // ============================================================================
 
 /**
- * Build a fake label that records what was done to it.
- *
- * `residual` models mail arriving mid-run: once the drain loop has seen an
- * empty page, the label reports threads again. That is precisely the state the
- * post-move safety check exists to catch. Keying on the drain rather than on
- * getThreads' `max` argument keeps the fake independent of whatever page size
- * the production code uses, so changing that page size cannot silently disarm
- * this test.
- *
- * @param {string} name - Label name
- * @param {number} count - How many threads it starts with
- * @param {number} residual - Threads that appear after the drain completes
- * @return {Object} Fake label
- */
-function fakeLabel(name, count, residual)
-{
-  const threads = [];
-  for (let i = 0; i < count; i++)
-  {
-    threads.push({id: name + '#' + i});
-  }
-
-  let drained = false;
-
-  return {
-    name: name,
-    threads: threads,
-    added: [],
-    getName: function() { return name; },
-    getThreads: function(start, max)
-    {
-      if (drained && residual > 0)
-      {
-        return [{id: name + '#residual'}];
-      }
-      const page = threads.slice(start, start + max);
-      if (page.length === 0) { drained = true; }
-      return page;
-    },
-    addToThreads: function(ts)
-    {
-      const self = this;
-      ts.forEach(function(t) { self.added.push(t); });
-    },
-    removeFromThreads: function(ts)
-    {
-      ts.forEach(function(t)
-      {
-        const i = threads.indexOf(t);
-        if (i !== -1) { threads.splice(i, 1); }
-      });
-    }
-  };
-}
-
-/**
  * Build a fake Gmail gateway that records every write.
  *
- * @param {Object} state - {labels, filters, labelsByName, createError}
+ * @param {Object} state - {labels, filters, createError}
  * @return {Object} Gateway with a .calls record
  */
 function fakeGateway(state)
 {
-  const calls = {created: [], removedFilters: [], deletedLabels: []};
+  const calls = {created: [], removedFilters: []};
 
   return {
     calls: calls,
     listLabels: function() { return state.labels || []; },
     listFilters: function() { return state.filters || []; },
-    getLabel: function(name) { return (state.labelsByName || {})[name] || null; },
-    deleteLabel: function(label) { calls.deletedLabels.push(label.getName()); return null; },
     createFilter: function(resource)
     {
       if (state.createError) { throw new Error(state.createError); }
@@ -385,25 +327,23 @@ function fakeGateway(state)
 }
 
 /**
- * Count the writes that went through the gateway: filter creates, filter
- * deletes and label deletes.
- *
- * Thread moves do NOT go through the gateway — they are methods on the label
- * objects — so tests assert those directly on the fake labels' `added` arrays.
+ * Count the writes that went through the gateway: filter creates and filter
+ * deletes.
  *
  * @param {Object} gw - Fake gateway
  * @return {number} Number of gateway writes recorded
  */
 function gatewayWrites(gw)
 {
-  return gw.calls.created.length + gw.calls.removedFilters.length + gw.calls.deletedLabels.length;
+  return gw.calls.created.length + gw.calls.removedFilters.length;
 }
 
 /**
- * Test suite for the mutating routes: rebuildFilters_ and mergeDrift_.
+ * Test suite for the toolkit's write paths: rebuildFilters_, the maintenance
+ * trigger, the Web App token and auth check, and dependency injection.
  *
- * Each test drives the real function through a fake gateway, so the code path
- * under test is the production one — only the Gmail calls are substituted.
+ * Each test drives the real function through a fake, so the code path under
+ * test is the production one — only the Google services are substituted.
  *
  * @param {Object} results - Results accumulator
  */
@@ -580,7 +520,7 @@ function testMutatingPaths(results)
     try
     {
       const out = [];
-      _authorized_({parameter: {token: 'wrong', fn: 'passFtrash', apply: '1'}}, out);
+      _authorized_({parameter: {token: 'wrong', fn: 'rebuildfilters', apply: '1'}}, out);
       const text = out.join('\n');
       assertEquals(text, 'DENIED', 'Denial must not echo the route, the token, or a reason');
     }
@@ -769,58 +709,6 @@ function testMutatingPaths(results)
     rebuildFilters_([], true, false,
       {gw: gw, spec: SPEC, superseded: [{from: 'narrow@x.com'}]});
     assertContains(gw.calls.removedFilters, 'old1', 'Superseded filter should go');
-  }, results);
-
-  // --- mergeDrift_ ---
-
-  runTest('mergeDrift_ moves threads and deletes the emptied source', function()
-  {
-    const src = fakeLabel('Old/Label', 3, 0);
-    const dst = fakeLabel('Reading', 0, 0);
-    const gw = fakeGateway({labelsByName: {'Old/Label': src, 'Reading': dst}});
-    mergeDrift_([], true, {gw: gw, merges: [{src: 'Old/Label', dst: 'Reading'}], shells: []});
-    assertEquals(dst.added.length, 3, 'All threads should land in the destination');
-    assertDeepEquals(gw.calls.deletedLabels, ['Old/Label'], 'Emptied source should be deleted');
-  }, results);
-
-  runTest('mergeDrift_ keeps a source that still has threads', function()
-  {
-    const src = fakeLabel('Old/Label', 2, 1);
-    const dst = fakeLabel('Reading', 0, 0);
-    const gw = fakeGateway({labelsByName: {'Old/Label': src, 'Reading': dst}});
-    const out = [];
-    mergeDrift_(out, true, {gw: gw, merges: [{src: 'Old/Label', dst: 'Reading'}], shells: []});
-    assertEquals(gw.calls.deletedLabels.length, 0, 'Must not delete a non-empty label');
-    assert(out.join('\n').indexOf('NOT deleting') !== -1, 'Should say why');
-  }, results);
-
-  runTest('mergeDrift_ skips a merge whose destination is missing', function()
-  {
-    const src = fakeLabel('Old/Label', 3, 0);
-    const gw = fakeGateway({labelsByName: {'Old/Label': src}});
-    const out = [];
-    mergeDrift_(out, true, {gw: gw, merges: [{src: 'Old/Label', dst: 'Gone'}], shells: []});
-    assertEquals(gatewayWrites(gw), 0, 'Must not move threads into a missing label');
-    assert(out.join('\n').indexOf('destination missing') !== -1, 'Should explain the skip');
-  }, results);
-
-  runTest('mergeDrift_ dry-run writes nothing', function()
-  {
-    const src = fakeLabel('Old/Label', 3, 0);
-    const dst = fakeLabel('Reading', 0, 0);
-    const gw = fakeGateway({labelsByName: {'Old/Label': src, 'Reading': dst}});
-    mergeDrift_([], false, {gw: gw, merges: [{src: 'Old/Label', dst: 'Reading'}], shells: []});
-    assertEquals(dst.added.length, 0, 'Dry-run must not move anything');
-    assertEquals(gatewayWrites(gw), 0, 'Dry-run must not delete anything');
-  }, results);
-
-  runTest('mergeDrift_ deletes an empty shell but not a populated one', function()
-  {
-    const empty = fakeLabel('Empty/Shell', 0, 0);
-    const full = fakeLabel('Full/Shell', 1, 0);
-    const gw = fakeGateway({labelsByName: {'Empty/Shell': empty, 'Full/Shell': full}});
-    mergeDrift_([], true, {gw: gw, merges: [], shells: ['Empty/Shell', 'Full/Shell']});
-    assertDeepEquals(gw.calls.deletedLabels, ['Empty/Shell'], 'Only the empty shell should go');
   }, results);
 
 }
