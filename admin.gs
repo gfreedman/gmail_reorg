@@ -100,7 +100,8 @@ const _GW =
 const _MAINTENANCE_HANDLER = 'runMaintenance';
 
 /**
- * Label any inbox thread that carries no label other than the spam tool's.
+ * Label inbox threads that have no user label apart from the spam checker's
+ * "checked" label. Suspected spam is left alone.
  *
  * This is what the time-driven trigger calls. It runs inside the project rather
  * than over HTTP, so it needs no Web App token and no machine to be awake — the

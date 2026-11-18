@@ -728,10 +728,8 @@ function validateOrganizationPlan(plan)
   }
 
   // Check for duplicate migrations (same source label twice)
-  // Null-prototype map: the keys below come from message headers or label names,
-  // which are outside our control. On a plain object a key of __proto__ or
-  // constructor resolves to something on Object.prototype instead of an own
-  // property, silently corrupting the tally.
+  // Null-prototype map keyed on label names, so a key can never collide with
+  // something on Object.prototype such as __proto__ or constructor.
   const seenFrom = Object.create(null);
   for (let i = 0; i < plan.migrations.length; i++)
   {
@@ -802,10 +800,8 @@ function listAllLabelsDetailed()
 function findDuplicateLabels()
 {
   const labels = GmailApp.getUserLabels();
-  // Null-prototype map: the keys below come from message headers or label names,
-  // which are outside our control. On a plain object a key of __proto__ or
-  // constructor resolves to something on Object.prototype instead of an own
-  // property, silently corrupting the tally.
+  // Null-prototype map keyed on label names, so a key can never collide with
+  // something on Object.prototype such as __proto__ or constructor.
   const seen = Object.create(null);
   const duplicates = [];
 

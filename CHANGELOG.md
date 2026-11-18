@@ -19,14 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`reorg_toolkit.gs`** — Web App toolkit for upkeep and diagnostics, exposed through a `doGet` router. Mutating routes are dry-run by default, take `&apply=1`, and are idempotent and time-budgeted
 - **Injectable Gmail gateway** (`_GW`, `_dep_`, `_depGw_`) so `rebuildFilters_` can be tested against a fake without touching a mailbox. `_depGw_` throws if a caller supplies `deps` without a gateway, rather than silently falling through to live Gmail
 - **Static filter-conflict detection** — Gmail runs every matching filter, so overlapping criteria double-label. `_specConflicts_` catches that before anything is written and aborts an `&apply=1` run
-- **Hand-edit protection** — `rebuildfilters` never overwrites a filter someone edited by hand; `&force=1` overrides
+- **Hand-edit protection** — `rebuildfilters` does not overwrite a filter whose labels or inbox setting were changed by hand; `&force=1` overrides
 - Test suites `testFilterSpec` and `testMutatingPaths` in `tests.gs` (47 cases), using injected fixtures so they run without the private configuration file
 - `test/mutation_test.js` — mutation runner that breaks one guard at a time and asserts a test catches it
 - `?fn=selftest` route to run the whole suite over HTTP
 - `.claspignore` to keep `test/` out of the Apps Script push
 - **Web App authentication** - every route requires a shared secret in the `WEBAPP_TOKEN` Script Property. Fails closed: with no token set, every route is refused. Constant-time comparison, and denials return a bare `DENIED`
 - **`admin.gs`** - the hand-run functions (`setWebAppToken`, `authorize`, `installMaintenanceTrigger`, `removeMaintenanceTrigger`), split out because the Run menu only lists the selected file
-- **Scheduled maintenance** - `runMaintenance` labels inbox threads carrying no plan label, on a daily trigger. Runs inside the project, so it needs no token and no machine left awake. Labels only. Installing twice replaces the trigger
+- **Scheduled maintenance** - `runMaintenance` labels inbox threads that have no filing label yet, on a daily trigger, and leaves suspected spam alone. Runs inside the project, so it needs no token and no machine left awake. Labels only. Installing twice replaces the trigger
 - **`SECURITY.md`** - the two layers, the token model, rotation, and what the toolkit can reach
 - **CI** - `.github/workflows/tests.yml` runs the unit and mutation suites on push and pull request
 
@@ -47,7 +47,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The gateway's `getLabel()` and `deleteLabel()` ops and the `fakeLabel` test helper, which only `driftmerge` used
 
 ### Fixed
-- **Silent backup failure** - a swallowed exception left the thread list empty, which reads the same as a label with no threads, and the run still printed `BACKUP COMPLETE`. Failed labels are now marked `READ FAILED` and the run reports itself incomplete
 - **Inert retry settings** - `_safeCall` passed hardcoded values to `withRetry`, so `CONFIG.MAX_RETRIES` and `CONFIG.RETRY_BASE_DELAY_MS` had no effect on any toolkit route
 - **Weak token generation** - Web App tokens came from `Math.random()`, whose state is recoverable from its outputs. Now built from `Utilities.getUuid()`, backed by `SecureRandom`
 - **Prototype pollution in tallies** - a sender whose domain is `__proto__` corrupted counts keyed on message headers. Twelve such maps now use `Object.create(null)`
@@ -63,7 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Backup System**
-  - `createBackup()` - Full email inventory to Google Spreadsheet
+  - `createBackup()` - Inventory of labelled threads to a Google Spreadsheet
   - `createLabelSummary()` - Quick label statistics
   - `backupUnreadEmails()` - Backup only unread emails
   - `backupDateRange()` - Backup specific date range

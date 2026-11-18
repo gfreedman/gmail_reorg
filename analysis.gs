@@ -275,10 +275,8 @@ function displayEmptyLabels(labelData)
 function displayPotentialDuplicates(labelData)
 {
   const duplicates = [];
-  // Null-prototype map: the keys below come from message headers or label names,
-  // which are outside our control. On a plain object a key of __proto__ or
-  // constructor resolves to something on Object.prototype instead of an own
-  // property, silently corrupting the tally.
+  // Null-prototype map keyed on label names, so a key can never collide with
+  // something on Object.prototype such as __proto__ or constructor.
   const seen = Object.create(null);
 
   // Normalize names by removing non-alphanumeric chars

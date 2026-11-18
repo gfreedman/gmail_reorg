@@ -80,8 +80,8 @@ Processing happens inside your Google account. Backups are Sheets created in you
 own Drive, private to you; nothing is shared automatically. No analytics, no
 telemetry, no external API calls.
 
-`createBackup` writes each labelled thread's ID, subject, sender, date and labels
-to a Sheet. If you turn on `BACKUP_CONFIG.INCLUDE_BODY_PREVIEW` (off by default),
+`createBackup` writes each labelled thread's ID, subject, sender, date, labels,
+message count and unread state to a Sheet. If you turn on `BACKUP_CONFIG.INCLUDE_BODY_PREVIEW` (off by default),
 it also reads each thread's first message and saves its first 100 characters. That is a standing
 copy of your mailbox metadata outside Gmail; delete it when you are done with it.
 

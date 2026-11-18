@@ -5,8 +5,8 @@
 // _private_data.gs, which is git-ignored because it contains personal data.
 // This file is safe to commit and review.
 //
-// Entry point is doGet(e): every route is dry-run by default and takes &apply=1
-// to execute. Mutating routes are idempotent and time-budgeted, so a timed-out
+// Entry point is doGet(e): every mutating route except passFreset is a dry run
+// unless given &apply=1. Mutating routes are idempotent and time-budgeted, so a timed-out
 // run is safe to repeat. passF and backup also save their place and resume;
 // inbox rescans from the start.
 // ---------------------------------------------------------------------------
@@ -461,10 +461,8 @@ function passF_(out, apply)
   // The _PASS_*_RULES tables are named after the original reorg passes, which are
   // gone; the sender rules they hold are still current.
   const allRules = [].concat(_MISC_TO, _PASS_F_RULES, _PASS_B_RULES, _PASS_C_LABEL_RULES, _PASS_D_LABEL_RULES);
-  // Null-prototype map: the keys below come from message headers or label names,
-  // which are outside our control. On a plain object a key of __proto__ or
-  // constructor resolves to something on Object.prototype instead of an own
-  // property, silently corrupting the tally.
+  // Null-prototype map keyed on label names, so a key can never collide with
+  // something on Object.prototype such as __proto__ or constructor.
   const dstCache = Object.create(null);
   const getDst = function(name)
   {
@@ -590,8 +588,8 @@ function passF_(out, apply)
 // org label (routing via the same rules as Pass F, Misc fallback). Keeps everything
 // in the inbox — never archives. Idempotent: already-labeled threads are skipped.
 /**
- * Label inbox threads that carry no label other than the spam tool's. Labels
- * only; never archives.
+ * Label inbox threads that have no user label apart from the spam checker's
+ * "checked" label. Suspected spam is left alone. Labels only; never archives.
  *
  * @param {Array<string>} out - Accumulator for output lines; returned to the caller as text.
  * @param {boolean} apply - False for a dry run that only reports; true to execute.
@@ -606,10 +604,8 @@ function passInbox_(out, apply)
   // The _PASS_*_RULES tables are named after the original reorg passes, which are
   // gone; the sender rules they hold are still current.
   const allRules = [].concat(_MISC_TO, _PASS_F_RULES, _PASS_B_RULES, _PASS_C_LABEL_RULES, _PASS_D_LABEL_RULES);
-  // Null-prototype map: the keys below come from message headers or label names,
-  // which are outside our control. On a plain object a key of __proto__ or
-  // constructor resolves to something on Object.prototype instead of an own
-  // property, silently corrupting the tally.
+  // Null-prototype map keyed on label names, so a key can never collide with
+  // something on Object.prototype such as __proto__ or constructor.
   const dstCache = Object.create(null);
   const getDst = function(name)
   {
@@ -1015,7 +1011,8 @@ function _specConflicts_(spec)
 
 // 'ok'     — matches spec exactly (extra removeLabelIds are allowed and preserved)
 // 'repair' — empty action: orphaned when the reorg deleted its target, no user intent to keep
-// 'manual' — someone edited this filter by hand; never overwritten without &force=1
+// 'manual' — its labels or inbox setting differ from the spec; not overwritten
+//            without &force=1
 /**
  * Decide whether an existing filter is correct, repairable, or hand-edited.
  *
@@ -1043,8 +1040,8 @@ function _classifyFilter_(prior, want, skipInbox)
 /**
  * Bring the account's delivery filters in line with _FILTER_SPEC.
  *
- * Refuses to write a spec that would double-label, never overwrites a filter
- * edited by hand unless forced, and reports a failed write rather than
+ * Refuses to write a spec that would double-label, does not overwrite a filter
+ * whose labels or inbox setting were changed by hand unless forced, and reports a failed write rather than
  * counting it as a success.
  *
  * @param {Array<string>} out - Accumulator for output lines; returned to the caller as text.
@@ -1352,7 +1349,7 @@ function _authorized_(e, out)
 /**
  * Web App entry point: route a request to one maintenance function.
  *
- * Every route is a dry run unless apply=1. Errors are caught and returned as
+ * Every mutating route except passFreset is a dry run unless apply=1. Errors are caught and returned as
  * text so a failure is visible in the response rather than only in the log.
  *
  * @param {Object} e - Apps Script event object carrying the query parameters.

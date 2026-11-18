@@ -13,7 +13,6 @@ backups/
 # IS committed.
 _private_data.gs
 
-
 # Data exports
 *.csv
 *.xlsx

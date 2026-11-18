@@ -170,11 +170,16 @@ does not need any of it.
 The toolkit runs behind a shared secret and fails closed: until you mint a token,
 every route returns `DENIED`. The setup functions live in `admin.gs`.
 
+**0. Add your configuration.** Create `_private_data.gs` with your sender rules
+and label names. Without it, most routes stop with a `ReferenceError` naming
+the missing constant.
+
 **1. Deploy.** Make sure `appsscript.json` from this repo is in the project, then
 choose **Deploy > New deployment**, type **Web app**, execute as **Me**, access
-**Anyone**. Copy the deployment URL. Every later code change needs a new
-deployment, and old deployments keep running their old code until you remove
-them under **Deploy > Manage deployments**.
+**Anyone**. Copy the deployment URL. After a code change, publish it as a new
+version of the same deployment (**Deploy > Manage deployments**, edit, **Version:
+New version**) to keep the URL. Each deployment keeps running the code it was
+given, so archive any you no longer use.
 
 **2. Grant filter access.** Select `admin.gs` and run `authorize()` once,
 approving the consent screen. The `listfilters` and `rebuildfilters` routes need
@@ -193,7 +198,8 @@ Every route needs `&token=`. Mutating routes stay dry runs until you add
 immediately.
 
 **4. Schedule the upkeep.** Run `installMaintenanceTrigger()` once. It installs a
-daily trigger that labels inbox threads that have no filing label yet. The trigger runs
+daily trigger that labels inbox threads that have no filing label yet, and
+leaves suspected spam alone. The trigger runs
 inside the project rather than over HTTP, so it needs no token and no machine
 left awake. It labels only, never archiving or trashing, and running it a second
 time replaces the trigger instead of adding another.
@@ -214,9 +220,10 @@ time replaces the trigger instead of adding another.
 The first two run every suite in `tests.gs`. The third, which is what CI runs,
 runs only the two toolkit suites (filter rules and the write paths), then
 disables each toolkit safety check in turn to confirm a test catches it, and
-prints `SURVIVED` for any guard that nothing covers. Run it after touching a guard. It loads the `.gs` files into
-a sandboxed scope with the Apps Script globals stubbed, so it never reaches
-Gmail, and it stubs the private configuration too.
+prints `SURVIVED` for any guard that nothing covers. Run it after touching a
+guard. It loads the `.gs` files into a sandboxed scope with the Apps Script
+globals stubbed, so it never reaches Gmail, and it stubs the private
+configuration when `_private_data.gs` is absent.
 
 ## Configuration
 
