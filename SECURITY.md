@@ -27,7 +27,8 @@ Everything above, plus:
 - **Serve mailbox data over HTTP.** `?fn=backup` returns every label and thread
   id as text; the diagnostics return sender domains and counts.
 
-Every mutating route is dry-run by default, idempotent, and re-runnable.
+Every mutating route is idempotent and re-runnable, and dry-run by default except
+`passFreset`, which only clears `passF`'s saved place.
 
 ## Web App access control
 

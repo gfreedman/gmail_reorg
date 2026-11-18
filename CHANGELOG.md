@@ -16,8 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New `CONFIG.MAX_RETRIES` (default 4) and `CONFIG.RETRY_BASE_DELAY_MS` (default 1000) knobs
 - **Retry telemetry** surfaced in batch summary as `Transient errors retried: N`
 - Test suite `testRetryHelpers` in `tests.gs` covering classification, success/failure paths, budget enforcement, and telemetry
-- **`reorg_toolkit.gs`** — Web App toolkit for one-off maintenance sweeps, exposed through a `doGet` router. Every mutating route is dry-run by default and takes `&apply=1`, and all of them are idempotent, checkpointed and time-budgeted
-- **Injectable Gmail gateway** (`_GW`, `_dep_`, `_depGw_`) so the mutating routes can be tested against a fake without touching a mailbox. `_depGw_` throws if a caller supplies `deps` without a gateway, rather than silently falling through to live Gmail
+- **`reorg_toolkit.gs`** — Web App toolkit for upkeep and diagnostics, exposed through a `doGet` router. Mutating routes are dry-run by default, take `&apply=1`, and are idempotent and time-budgeted
+- **Injectable Gmail gateway** (`_GW`, `_dep_`, `_depGw_`) so `rebuildFilters_` can be tested against a fake without touching a mailbox. `_depGw_` throws if a caller supplies `deps` without a gateway, rather than silently falling through to live Gmail
 - **Static filter-conflict detection** — Gmail runs every matching filter, so overlapping criteria double-label. `_specConflicts_` catches that before anything is written and aborts an `&apply=1` run
 - **Hand-edit protection** — `rebuildfilters` never overwrites a filter someone edited by hand; `&force=1` overrides
 - Test suites `testFilterSpec` and `testMutatingPaths` in `tests.gs` (47 cases), using injected fixtures so they run without the private configuration file
@@ -31,11 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI** - `.github/workflows/tests.yml` runs the unit and mutation suites on push and pull request
 
 ### Changed
+- Requests with no `fn` now return `Unknown fn` instead of running the `overlaps` report
 - `applyLabelToThreads` and `removeOldLabel` now accept `batchStats` and route through `withRetry`
 - `createBatchStats()` includes a `retries` counter
-- Toolkit configuration (sender rules, label taxonomy, thread IDs) is separated into a git-ignored `_private_data.gs`, so the logic is reviewable. A missing configuration file raises rather than degrading into an empty run
+- Toolkit configuration (sender rules, label taxonomy) is separated into a git-ignored `_private_data.gs`, so the logic is reviewable. A missing configuration file raises rather than degrading into an empty run
 - `reorg_toolkit.gs` converted to the house style: Allman braces, no single-line blocks, JSDoc on every function
-- Repeated literals replaced with named constants (`_PAGE_SIZE`, `_DRAIN_MAX_PASSES`, the runtime budgets). `MAX_RUNTIME` had been declared 10 times at three different values while `CONFIG.MAX_RUNTIME_MS` already existed
+- Repeated literals replaced with named constants (`_PAGE_SIZE`, the runtime budgets). `MAX_RUNTIME` had been declared 10 times at three different values while `CONFIG.MAX_RUNTIME_MS` already existed
 
 ### Removed
 - `?fn=linkedinnoise` and `linkedinNoiseBackfill_` - a one-off backfill that has had nothing to move since its single run. Delivery filters now file that mail on arrival
@@ -43,7 +44,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Finished one-off toolkit routes** - `passA`-`passE`, `passFtrash`, `cleanup`, `recover`, `overlaps`, `flattenReading`, `productbc`, `miscextract`, `consolidate`, `cleanupparents`, `driftmerge` and `inboxtriage`, with the helpers only they used. Each was a migration that has already run. The toolkit no longer trashes mail
 - `?fn=nutrilawn` - it called a function that did not exist, so any request to it failed
 - The gateway's `getLabel()` and `deleteLabel()` ops and the `fakeLabel` test helper, which only `driftmerge` used
-- Requests with no `fn` now return `Unknown fn` instead of running the `overlaps` report
 
 ### Fixed
 - **Silent backup failure** - a swallowed exception left the thread list empty, which reads the same as a label with no threads, and the run still printed `BACKUP COMPLETE`. Failed labels are now marked `READ FAILED` and the run reports itself incomplete

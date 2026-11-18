@@ -1,12 +1,14 @@
 // ---------------------------------------------------------------------------
 // Gmail reorg toolkit — logic only.
 //
-// All configuration (sender rules, addresses, thread IDs, label names) lives in
+// All configuration (sender rules, addresses, label names) lives in
 // _private_data.gs, which is git-ignored because it contains personal data.
 // This file is safe to commit and review.
 //
 // Entry point is doGet(e): every route is dry-run by default and takes &apply=1
-// to execute. All mutating routes are idempotent, checkpointed, and time-budgeted.
+// to execute. Mutating routes are idempotent and time-budgeted, so a timed-out
+// run is safe to repeat. passF and backup also save their place and resume;
+// inbox rescans from the start.
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -26,9 +28,9 @@ const _PAGE_SIZE = 500;
 // the buffer to flush output.
 const _RUNTIME_MS = (typeof CONFIG !== 'undefined' && CONFIG.MAX_RUNTIME_MS) || 300000;
 
-// Routes that accumulate a large response body (backup_, miscBreakdown_)
-// stop 20s earlier, because serialising that body
-// happens after the loop exits and still has to fit inside the same 6 minutes.
+// Routes that accumulate a large response body (backup_, miscBreakdown_) stop
+// 20s earlier, because serialising that body happens after the loop exits and
+// still has to fit inside the same 6 minutes.
 const _RUNTIME_MS_LARGE_OUTPUT = _RUNTIME_MS - 20000;
 
 // Ceilings on how far a read-only diagnostic will page before reporting what it
@@ -421,7 +423,7 @@ function inspectCategory_(out, cat)
  *
  * @param {string} fromAddr - Sender address.
  * @param {Array<Object>} allRules - Rule table to match against.
- * @return {string|null} Destination label name, or null if no rule matches.
+ * @return {string} Destination label name, or 'Misc' if no rule matches.
  */
 function _passF_dest(fromAddr, allRules)
 {
@@ -456,6 +458,8 @@ function passF_(out, apply)
     return;
   }
 
+  // The _PASS_*_RULES tables are named after the original reorg passes, which are
+  // gone; the sender rules they hold are still current.
   const allRules = [].concat(_MISC_TO, _PASS_F_RULES, _PASS_B_RULES, _PASS_C_LABEL_RULES, _PASS_D_LABEL_RULES);
   // Null-prototype map: the keys below come from message headers or label names,
   // which are outside our control. On a plain object a key of __proto__ or
@@ -596,6 +600,8 @@ function passInbox_(out, apply)
   out.push((apply ? 'APPLY' : 'DRY-RUN') + ' Inbox sweep — label inbox threads into org buckets (no archiving)');
   out.push('---');
 
+  // The _PASS_*_RULES tables are named after the original reorg passes, which are
+  // gone; the sender rules they hold are still current.
   const allRules = [].concat(_MISC_TO, _PASS_F_RULES, _PASS_B_RULES, _PASS_C_LABEL_RULES, _PASS_D_LABEL_RULES);
   // Null-prototype map: the keys below come from message headers or label names,
   // which are outside our control. On a plain object a key of __proto__ or
@@ -779,8 +785,8 @@ function miscBreakdown_(out)
 
 // ---- Scope-free mailbox backup (label -> thread IDs) ----
 // Emits, per user label, the list of thread IDs it contains. This is the restore
-// key for the consolidation: to revert any move, recreate the old label and re-add
-// it to these IDs. Uses only Gmail scope (no Sheets/Drive re-auth). getId() is cheap
+// key for label changes: to revert a move, recreate the old label and re-add it
+// to these IDs. Uses only Gmail scope (no Sheets/Drive re-auth). getId() is cheap
 // (no message fetch), so the whole mailbox dumps in one response; if it ever hits the
 // time budget it checkpoints by label index and the caller appends across curls.
 /**
@@ -849,9 +855,16 @@ function backup_(out)
   out.push('# BACKUP COMPLETE — ' + labels.length + ' labels');
 }
 
-// Run this ONCE from the Apps Script editor (Run ▶) and approve the consent screen.
-// It touches the filters API so Google grants gmail.settings.basic; after that the
-// listfilters and rebuildfilters routes work over curl.
+// Deliberately NOT `deps.x || fallback`: an empty string or 0 is a valid config
+// value, and `||` would silently swap it for production data. Tests would then
+// pass while exercising the real spec instead of their fixture.
+//
+// Callers pass the production constant directly as `fallback`. Because JS
+// evaluates arguments eagerly that constant is read even when deps overrides it,
+// so a missing _private_data.gs raises a ReferenceError immediately. That is the
+// intended behaviour — an absent configuration must abort the run, not quietly
+// reduce it to a no-op that reports success. Tests declare their own stubs (see
+// test/mutation_test.js) rather than making this file tolerate the gap.
 /**
  * Resolve one injected dependency, falling back to production configuration.
  *

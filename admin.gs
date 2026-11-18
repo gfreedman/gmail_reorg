@@ -86,19 +86,6 @@ const _GW =
   }
 };
 
-// Resolve one injected dependency.
-//
-// Deliberately NOT `deps.x || fallback`: an empty string or 0 is a valid config
-// value, and `||` would silently swap it for production data. Tests would then
-// pass while exercising the real spec instead of their fixture.
-//
-// Callers pass the production constant directly as `fallback`. Because JS
-// evaluates arguments eagerly that constant is read even when deps overrides it,
-// so a missing _private_data.gs raises a ReferenceError immediately. That is the
-// intended behaviour — an absent configuration must abort the run, not quietly
-// reduce it to a no-op that reports success. Tests declare their own stubs (see
-// test/mutation_test.js) rather than making this file tolerate the gap.
-
 // ============================================================================
 // SCHEDULED MAINTENANCE
 // ============================================================================

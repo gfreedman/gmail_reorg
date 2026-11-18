@@ -339,10 +339,11 @@ function gatewayWrites(gw)
 }
 
 /**
- * Test suite for the mutating route rebuildFilters_.
+ * Test suite for the toolkit's write paths: rebuildFilters_, the maintenance
+ * trigger, the Web App token and auth check, and dependency injection.
  *
- * Each test drives the real function through a fake gateway, so the code path
- * under test is the production one — only the Gmail calls are substituted.
+ * Each test drives the real function through a fake, so the code path under
+ * test is the production one — only the Google services are substituted.
  *
  * @param {Object} results - Results accumulator
  */
@@ -519,7 +520,7 @@ function testMutatingPaths(results)
     try
     {
       const out = [];
-      _authorized_({parameter: {token: 'wrong', fn: 'passFtrash', apply: '1'}}, out);
+      _authorized_({parameter: {token: 'wrong', fn: 'rebuildfilters', apply: '1'}}, out);
       const text = out.join('\n');
       assertEquals(text, 'DENIED', 'Denial must not echo the route, the token, or a reason');
     }
