@@ -799,12 +799,14 @@ function miscBreakdown_(out)
  * indistinguishable from a label that is genuinely empty.
  *
  * @param {Array<string>} out - Accumulator for output lines; returned to the caller as text.
+ * @param {Object} [deps] - Test injection point: {gw, props}. Production omits it.
  */
-function backup_(out)
+function backup_(out, deps)
 {
   const startTime = new Date().getTime();
-  const props = PropertiesService.getScriptProperties();
-  const labels = GmailApp.getUserLabels();
+  const gw = _depGw_(deps);
+  const props = _dep_(deps, 'props', PropertiesService.getScriptProperties());
+  const labels = gw.getUserLabels();
   let labelIdx = parseInt(props.getProperty('backup_labelIdx') || '0', 10);
   let failed = parseInt(props.getProperty('backup_failed') || '0', 10);
   if (labelIdx === 0)
@@ -828,10 +830,7 @@ function backup_(out)
     let ids = null;
     try
     {
-      ids = getAllThreadsFromLabel(label).map(function(t)
-      {
-        return t.getId();
-      });
+      ids = _readThreadIds_(label);
     }
     catch (e)
     {
@@ -852,6 +851,35 @@ function backup_(out)
     return;
   }
   out.push('# BACKUP COMPLETE — ' + labels.length + ' labels');
+}
+
+/**
+ * Read every thread id on a label, letting any read error propagate.
+ *
+ * getAllThreadsFromLabel logs a failed page and returns what it has so far,
+ * which is right for sweeps that can simply run again but wrong for a backup:
+ * a short list would look like a complete one. This pages directly instead.
+ *
+ * @param {GmailLabel} label - Label to read.
+ * @return {Array<string>} Thread ids on the label.
+ * @throws {Error} If any page of threads cannot be read.
+ */
+function _readThreadIds_(label)
+{
+  const ids = [];
+  const pageSize = CONSTANTS.THREAD_BATCH_SIZE;
+  for (let start = 0; ; start += pageSize)
+  {
+    const page = label.getThreads(start, pageSize) || [];
+    for (let i = 0; i < page.length; i++)
+    {
+      ids.push(page[i].getId());
+    }
+    if (page.length < pageSize)
+    {
+      return ids;
+    }
+  }
 }
 
 // Deliberately NOT `deps.x || fallback`: an empty string or 0 is a valid config
@@ -1009,12 +1037,18 @@ function _specConflicts_(spec)
   });
 }
 
-// 'ok'     — matches spec exactly (extra removeLabelIds are allowed and preserved)
-// 'repair' — empty action: orphaned when the reorg deleted its target, no user intent to keep
-// 'manual' — its labels or inbox setting differ from the spec; not overwritten
-//            without &force=1
+// 'ok'     — adds exactly the spec's label with the spec's inbox setting (extra
+//            removeLabelIds, forwarding or criteria are left as they are)
+// 'repair' — adds no label and carries nothing else hand-made: orphaned when the
+//            reorg deleted its target, so there is no user intent to keep
+// 'manual' — anything else, including a filter that forwards mail or has extra
+//            criteria such as a subject; not overwritten without &force=1
 /**
  * Decide whether an existing filter is correct, repairable, or hand-edited.
+ *
+ * Matching is by from+query only, and a rewrite keeps only removeLabelIds, so
+ * a filter with any other action or criterion must never count as repairable:
+ * overwriting it would drop a forward or widen the filter.
  *
  * @param {Object} prior - Existing Gmail filter resource.
  * @param {string} want - Label id the spec expects.
@@ -1030,7 +1064,7 @@ function _classifyFilter_(prior, want, skipInbox)
   {
     return 'ok';
   }
-  if (adds.length === 0)
+  if (adds.length === 0 && !_hasUnmanagedSettings_(prior))
   {
     return 'repair';
   }
@@ -1038,11 +1072,43 @@ function _classifyFilter_(prior, want, skipInbox)
 }
 
 /**
+ * Report whether a filter carries settings a rebuild would not recreate.
+ *
+ * A rebuild writes only from/query criteria, addLabelIds and removeLabelIds.
+ * Any other criterion (to, subject, hasAttachment, size...) or action (forward)
+ * with a value set is something a person configured.
+ *
+ * @param {Object} prior - Existing Gmail filter resource.
+ * @return {boolean} True if any unmanaged criterion or action is set.
+ */
+function _hasUnmanagedSettings_(prior)
+{
+  const managedCriteria = ['from', 'query'];
+  const managedActions = ['addLabelIds', 'removeLabelIds'];
+  const isSet = function(v)
+  {
+    return v !== undefined && v !== null && v !== '' && v !== false;
+  };
+  const criteria = prior.criteria || {};
+  const action = prior.action || {};
+  const extraCriteria = Object.keys(criteria).some(function(k)
+  {
+    return managedCriteria.indexOf(k) === -1 && isSet(criteria[k]);
+  });
+  const extraAction = Object.keys(action).some(function(k)
+  {
+    return managedActions.indexOf(k) === -1 && isSet(action[k]);
+  });
+  return extraCriteria || extraAction;
+}
+
+/**
  * Bring the account's delivery filters in line with _FILTER_SPEC.
  *
  * Refuses to write a spec that would double-label, does not overwrite a filter
- * whose labels or inbox setting were changed by hand unless forced, and reports a failed write rather than
- * counting it as a success.
+ * someone configured by hand (different labels or inbox setting, forwarding, or
+ * extra criteria) unless forced, and reports a failed write rather than counting
+ * it as a success.
  *
  * @param {Array<string>} out - Accumulator for output lines; returned to the caller as text.
  * @param {boolean} apply - False for a dry run that only reports; true to execute.

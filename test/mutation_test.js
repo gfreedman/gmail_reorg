@@ -65,6 +65,20 @@ const MUTATIONS = [
    "    if (!apply) { out.push('WOULD DELETE ' + label + '  (' + stale.id + ')'); continue; }",
    "    if (true) { continue; }",
    ['deletes a superseded filter']],
+  // The original bug: reading through getAllThreadsFromLabel, which logs a
+  // failed page and returns a partial list instead of throwing.
+  ['backup read swallows errors again',
+   "ids = _readThreadIds_(label);",
+   "ids = getAllThreadsFromLabel(label).map(function(t) { return t.getId(); });",
+   ['backup_ reports a label it cannot read']],
+  ['incomplete backup reported as complete',
+   "if (failed > 0)",
+   "if (false)",
+   ['refuses to declare success']],
+  ['forwarding filter treated as repairable',
+   "if (adds.length === 0 && !_hasUnmanagedSettings_(prior))",
+   "if (adds.length === 0)",
+   ['protects a filter that only forwards', 'does not overwrite a filter that forwards mail']],
 ];
 
 /**

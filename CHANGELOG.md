@@ -19,8 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`reorg_toolkit.gs`** — Web App toolkit for upkeep and diagnostics, exposed through a `doGet` router. Mutating routes are dry-run by default, take `&apply=1`, and are idempotent and time-budgeted
 - **Injectable Gmail gateway** (`_GW`, `_dep_`, `_depGw_`) so `rebuildFilters_` can be tested against a fake without touching a mailbox. `_depGw_` throws if a caller supplies `deps` without a gateway, rather than silently falling through to live Gmail
 - **Static filter-conflict detection** — Gmail runs every matching filter, so overlapping criteria double-label. `_specConflicts_` catches that before anything is written and aborts an `&apply=1` run
-- **Hand-edit protection** — `rebuildfilters` does not overwrite a filter whose labels or inbox setting were changed by hand; `&force=1` overrides
-- Test suites `testFilterSpec` and `testMutatingPaths` in `tests.gs` (47 cases), using injected fixtures so they run without the private configuration file
+- **Hand-edit protection** — `rebuildfilters` never overwrites a filter someone configured by hand: different labels or inbox setting, forwarding, or extra criteria such as a subject. `&force=1` overrides
+- Test suites `testFilterSpec` and `testMutatingPaths` in `tests.gs` (54 cases), using injected fixtures so they run without the private configuration file
 - `test/mutation_test.js` — mutation runner that breaks one guard at a time and asserts a test catches it
 - `?fn=selftest` route to run the whole suite over HTTP
 - `.claspignore` to keep `test/` out of the Apps Script push
@@ -47,6 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The gateway's `getLabel()` and `deleteLabel()` ops and the `fakeLabel` test helper, which only `driftmerge` used
 
 ### Fixed
+- **Silent backup failure** - `?fn=backup` read each label through a helper that logs a failed page and returns a partial list, so a read error produced a short list and the run still printed `BACKUP COMPLETE`. It now pages each label directly; a failed label is marked `READ FAILED` and the run reports itself incomplete
+- **Hand-made filters overwritten** - `rebuildfilters` treated any filter that added no label as an orphan and replaced it, so a hand-made filter on the same sender that forwarded mail or had an extra criterion was rewritten, losing the forward or widening the filter. Such filters are now left alone unless `&force=1`
 - **Inert retry settings** - `_safeCall` passed hardcoded values to `withRetry`, so `CONFIG.MAX_RETRIES` and `CONFIG.RETRY_BASE_DELAY_MS` had no effect on any toolkit route
 - **Weak token generation** - Web App tokens came from `Math.random()`, whose state is recoverable from its outputs. Now built from `Utilities.getUuid()`, backed by `SecureRandom`
 - **Prototype pollution in tallies** - a sender whose domain is `__proto__` corrupted counts keyed on message headers. Twelve such maps now use `Object.create(null)`
