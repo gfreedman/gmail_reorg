@@ -74,6 +74,7 @@ function createBackup()
   let row = 2;
   let skippedCount = 0;
   const failedLabels = [];
+  let failedThreads = 0;
   let timedOut = false;
 
   log('Found ' + labels.length + ' labels to process');
@@ -120,17 +121,19 @@ function createBackup()
         continue;
       }
 
-      processedThreadIds[threadId] = true;
-
       try
       {
         const rowData = extractThreadData(thread);
         sheet.getRange(row, 1, 1, rowData.length).setValues([rowData]);
         row++;
+        // Marked only once written, so a thread that fails here can still be
+        // picked up from another of its labels.
+        processedThreadIds[threadId] = true;
       }
       catch (e)
       {
         logError('Error processing thread ' + threadId + ': ' + e.message);
+        failedThreads++;
       }
 
       // Flush periodically to prevent timeout and save progress
@@ -146,12 +149,22 @@ function createBackup()
   formatBackupSheet(sheet, headers.length);
 
   const totalThreads = row - 2;
-  if (timedOut || failedLabels.length > 0)
+  const problems = [];
+  if (timedOut)
   {
-    logWarning('BACKUP INCOMPLETE — ' + (timedOut ? 'stopped at the time limit' : '') +
-      (timedOut && failedLabels.length > 0 ? '; ' : '') +
-      (failedLabels.length > 0 ? failedLabels.length + ' label(s) could not be read: ' +
-        failedLabels.join(', ') : '') + '. Do not rely on this backup.');
+    problems.push('stopped at the time limit');
+  }
+  if (failedLabels.length > 0)
+  {
+    problems.push(failedLabels.length + ' label(s) could not be read: ' + failedLabels.join(', '));
+  }
+  if (failedThreads > 0)
+  {
+    problems.push(failedThreads + ' thread(s) could not be written');
+  }
+  if (problems.length > 0)
+  {
+    logWarning('BACKUP INCOMPLETE — ' + problems.join('; ') + '. Do not rely on this backup.');
   }
   else
   {

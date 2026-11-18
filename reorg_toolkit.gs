@@ -836,11 +836,10 @@ function backup_(out, deps)
     let ids = null;
     try
     {
-      ids = getAllThreadsStrict(label,
-        {runStartTime: startTime, maxRuntimeMs: _RUNTIME_MS_LARGE_OUTPUT}).map(function(t)
-        {
-          return t.getId();
-        });
+      ids = getAllThreadsStrict(label).map(function(t)
+      {
+        return t.getId();
+      });
     }
     catch (e)
     {
@@ -1300,6 +1299,13 @@ function rebuildFilters_(out, apply, force, deps)
       continue;
     }
     touched[stale.id] = true;
+    if (_hasUnmanagedSettings_(stale) && !force)
+    {
+      out.push('MANUAL  superseded ' + label + ' has forwarding or extra criteria — left alone,' +
+        ' re-run with &force=1 to delete');
+      skipped++;
+      continue;
+    }
     if (!apply)
     {
       out.push('WOULD DELETE ' + label + '  (' + stale.id + ')');

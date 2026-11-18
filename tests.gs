@@ -714,6 +714,16 @@ function testMutatingPaths(results)
     assert(out.join('\n').indexOf('forwarding or extra criteria') !== -1, 'Should say why');
   }, results);
 
+  runTest('rebuildFilters_ does not delete a superseded filter that forwards mail', function()
+  {
+    const stale = {id: 'old1', criteria: {from: 'narrow@x.com'}, action: {forward: 'me@elsewhere.example'}};
+    const gw = fakeGateway({labels: LABELS, filters: [stale]});
+    const out = [];
+    rebuildFilters_(out, true, false, {gw: gw, spec: SPEC, superseded: [{from: 'narrow@x.com'}]});
+    assertEquals(gw.calls.removedFilters.length, 0, 'A hand-made superseded filter must survive');
+    assert(out.join('\n').indexOf('MANUAL') !== -1, 'Should report it as MANUAL');
+  }, results);
+
   // --- backup_ ---
 
   /**
@@ -732,7 +742,9 @@ function testMutatingPaths(results)
       {
         if (failAt !== undefined && start >= failAt)
         {
-          throw new Error('Service error: Gmail');
+          // Deliberately not a transient message, so withRetry gives up at once
+          // and selftest never sleeps through a real backoff.
+          throw new Error('Label read failed (permanent)');
         }
         const page = [];
         for (let i = start; i < Math.min(start + max, count); i++)
@@ -799,6 +811,26 @@ function testMutatingPaths(results)
     }
     assert(message.indexOf('refusing to use real Script Properties') !== -1,
       'A test that forgets props must be refused by the guard, not crash later');
+  }, results);
+
+  runTest('getAllThreadsStrict retries a transient page error and succeeds', function()
+  {
+    let calls = 0;
+    const flaky = {
+      getName: function() { return 'Flaky'; },
+      getThreads: function(start, max)
+      {
+        calls++;
+        if (calls === 1)
+        {
+          throw new Error('Service error: Gmail');
+        }
+        return [{getId: function() { return 't1'; }}];
+      }
+    };
+    const threads = getAllThreadsStrict(flaky, {baseDelayMs: 1});
+    assertEquals(threads.length, 1, 'Should return the page read on retry');
+    assertEquals(calls, 2, 'Should have retried exactly once');
   }, results);
 
   runTest('backup_ pages past a full first page', function()
@@ -1133,6 +1165,13 @@ function testRetryHelpers(results)
   Logger.log('=== Retry Helper Tests ===');
 
   // --- isTransientError classification ---
+
+  runTest('isTransientError detects Gmail service and server errors', function()
+  {
+    assert(isTransientError(new Error('Service error: Gmail')), 'Service error should retry');
+    assert(isTransientError(new Error('We\'re sorry, a server error occurred. Please wait a bit and try again.')),
+      'Server error should retry');
+  }, results);
 
   runTest('isTransientError detects 503', function()
   {

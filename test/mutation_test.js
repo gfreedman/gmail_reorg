@@ -68,8 +68,8 @@ const MUTATIONS = [
   // The original bug: reading through getAllThreadsFromLabel, which logs a
   // failed page and returns a partial list instead of throwing.
   ['backup read swallows errors again',
-   "ids = getAllThreadsStrict(label,",
-   "ids = getAllThreadsFromLabel(label,",
+   "ids = getAllThreadsStrict(label)",
+   "ids = getAllThreadsFromLabel(label)",
    ['backup_ reports a label it cannot read']],
   ['incomplete backup reported as complete',
    "if (failed > 0)",
@@ -83,6 +83,10 @@ const MUTATIONS = [
    "if (adds.length === 0 && !dropsArchive && !_hasUnmanagedSettings_(prior))",
    "if (adds.length === 0 && !_hasUnmanagedSettings_(prior))",
    ['protects an archive-only filter']],
+  ['superseded hand-made filter deleted',
+   "if (_hasUnmanagedSettings_(stale) && !force)",
+   "if (false)",
+   ['does not delete a superseded filter that forwards mail']],
   ['backup props guard removed',
    "if (deps && !deps.props)",
    "if (false)",

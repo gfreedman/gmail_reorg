@@ -141,8 +141,12 @@ function getAllThreadsFromLabel(labelOrName)
  * cannot work that way: a short list looks exactly like a complete one. Each
  * page is retried on transient errors (see withRetry) before giving up.
  *
+ * Callers pass no time budget: the worst-case backoff is a few seconds, well
+ * inside the margin both backups keep below the 6-minute limit, and a retry
+ * abandoned for time would be misreported as a failed label.
+ *
  * @param {GmailLabel} label - Label to read.
- * @param {Object} [retryOpts] - Passed to withRetry, e.g. {runStartTime, maxRuntimeMs}.
+ * @param {Object} [retryOpts] - Passed to withRetry; tests use it to shorten backoff.
  * @return {GmailThread[]} Every thread on the label.
  * @throws {Error} If a page still cannot be read after retrying.
  */
@@ -150,6 +154,7 @@ function getAllThreadsStrict(label, retryOpts)
 {
   const threads = [];
   const pageSize = CONSTANTS.THREAD_BATCH_SIZE;
+  const description = 'read threads of "' + label.getName() + '"';
   let start = 0;
 
   // Ends on the first page shorter than pageSize; a failed read throws out.
@@ -158,7 +163,7 @@ function getAllThreadsStrict(label, retryOpts)
     const page = withRetry(function()
     {
       return label.getThreads(start, pageSize);
-    }, 'read threads of "' + label.getName() + '"', retryOpts) || [];
+    }, description, retryOpts) || [];
     for (let i = 0; i < page.length; i++)
     {
       threads.push(page[i]);
@@ -368,7 +373,9 @@ function isTransientError(e)
          msg.indexOf('backend error') !== -1 ||
          msg.indexOf('temporarily unavailable') !== -1 ||
          msg.indexOf('timed out') !== -1 ||
-         msg.indexOf('timeout') !== -1;
+         msg.indexOf('timeout') !== -1 ||
+         msg.indexOf('service error') !== -1 ||
+         msg.indexOf('server error occurred') !== -1;
 }
 
 // ============================================================================
