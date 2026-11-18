@@ -82,10 +82,6 @@ const _GW =
   {
     return GmailApp.deleteLabel(label);
   },
-  search: function(q, start, max)
-  {
-    return GmailApp.search(q, start, max);
-  },
   listFilters: function()
   {
     return Gmail.Users.Settings.Filters.list('me').filter || [];

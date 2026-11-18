@@ -2976,58 +2976,6 @@ function rebuildFilters_(out, apply, force, deps)
 }
 
 /**
- * Move already-filed notification noise out of a label it no longer belongs in.
- *
- * @param {Array<string>} out - Accumulator for output lines; returned to the caller as text.
- * @param {boolean} apply - False for a dry run that only reports; true to execute.
- * @param {Object} [deps] - Test injection point. See _depGw_; production omits it.
- */
-function linkedinNoiseBackfill_(out, apply, deps)
-{
-  const gw = _depGw_(deps);
-  const srcName = _dep_(deps, 'src', _LINKEDIN_NOISE_SRC);
-  const dstName = _dep_(deps, 'dst', _LINKEDIN_NOISE_DST);
-  const query = _dep_(deps, 'query', _LINKEDIN_NOISE_Q);
-  out.push((apply ? 'APPLY' : 'DRY-RUN') + ' LinkedIn noise: ' + srcName + ' -> ' + dstName);
-  const jobs = gw.getLabel(srcName);
-  const misc = gw.getLabel(dstName);
-  if (!jobs || !misc)
-  {
-    out.push('ABORT — ' + srcName + ' or ' + dstName + ' missing');
-    return;
-  }
-  let moved = 0,
-    safety = 0;
-  while (true)
-  {
-    const threads = gw.search(query, 0, 50);
-    if (threads.length === 0) break;
-    if (!apply)
-    {
-      out.push('WOULD MOVE ' + threads.length + '+ threads');
-      break;
-    }
-    _safeCall(function()
-    {
-      misc.addToThreads(threads);
-      return null;
-    }, 'addToThreads ' + dstName, out);
-    _safeCall(function()
-    {
-      jobs.removeFromThreads(threads);
-      return null;
-    }, 'removeFromThreads ' + srcName, out);
-    moved += threads.length;
-    if (++safety > _DRAIN_MAX_PASSES)
-    {
-      out.push('safety stop');
-      break;
-    }
-  }
-  out.push((apply ? 'Moved ' + moved : 'Dry-run only') + '. Re-run safe (idempotent).');
-}
-
-/**
  * Compare two strings without short-circuiting on the first differing byte.
  *
  * The timing signal over HTTPS is small, but a token check is exactly the place
@@ -3190,10 +3138,6 @@ function doGet(e)
     else if (fn === 'driftmerge')
     {
       mergeDrift_(out, apply);
-    }
-    else if (fn === 'linkedinnoise')
-    {
-      linkedinNoiseBackfill_(out, apply);
     }
     else if (fn === 'nutrilawn')
     {

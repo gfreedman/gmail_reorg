@@ -72,10 +72,6 @@ const MUTATIONS = [
    "if (label.getThreads(0, 1).length > 0) { out.push('NOT deleting ' + name + ' — still has threads'); continue; }",
    "if (false) { continue; }",
    ['deletes an empty shell but not a populated one']],
-  ['backfill label existence check removed',
-   "if (!jobs || !misc) { out.push('ABORT — ' + srcName + ' or ' + dstName + ' missing'); return; }",
-   "if (false) { return; }",
-   ['aborts when a label is missing']],
   ['superseded deletion skipped',
    "    if (!apply) { out.push('WOULD DELETE ' + label + '  (' + stale.id + ')'); continue; }",
    "    if (true) { continue; }",
@@ -114,10 +110,7 @@ function runSuite(sources) {
     'const _FILTER_SPEC = [];',
     'const _FILTER_SUPERSEDED = [];',
     'const _DRIFT_MERGES = [];',
-    'const _DRIFT_SHELLS = [];',
-    'const _LINKEDIN_NOISE_SRC = null;',
-    'const _LINKEDIN_NOISE_DST = null;',
-    'const _LINKEDIN_NOISE_Q = null;'
+    'const _DRIFT_SHELLS = [];'
   ].join('\n');
 
   const privPath = R + '_private_data.gs';

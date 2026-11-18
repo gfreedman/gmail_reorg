@@ -361,12 +361,12 @@ function fakeLabel(name, count, residual)
 /**
  * Build a fake Gmail gateway that records every write.
  *
- * @param {Object} state - {labels, filters, labelsByName, searchResults, createError}
+ * @param {Object} state - {labels, filters, labelsByName, createError}
  * @return {Object} Gateway with a .calls record
  */
 function fakeGateway(state)
 {
-  const calls = {created: [], removedFilters: [], deletedLabels: [], searches: 0};
+  const calls = {created: [], removedFilters: [], deletedLabels: []};
 
   return {
     calls: calls,
@@ -374,12 +374,6 @@ function fakeGateway(state)
     listFilters: function() { return state.filters || []; },
     getLabel: function(name) { return (state.labelsByName || {})[name] || null; },
     deleteLabel: function(label) { calls.deletedLabels.push(label.getName()); return null; },
-    search: function()
-    {
-      calls.searches++;
-      const batch = (state.searchResults || []).shift();
-      return batch || [];
-    },
     createFilter: function(resource)
     {
       if (state.createError) { throw new Error(state.createError); }
@@ -406,8 +400,7 @@ function gatewayWrites(gw)
 }
 
 /**
- * Test suite for the mutating routes: rebuildFilters_, mergeDrift_ and
- * linkedinNoiseBackfill_.
+ * Test suite for the mutating routes: rebuildFilters_ and mergeDrift_.
  *
  * Each test drives the real function through a fake gateway, so the code path
  * under test is the production one — only the Gmail calls are substituted.
@@ -830,44 +823,6 @@ function testMutatingPaths(results)
     assertDeepEquals(gw.calls.deletedLabels, ['Empty/Shell'], 'Only the empty shell should go');
   }, results);
 
-  // --- linkedinNoiseBackfill_ ---
-
-  runTest('linkedinNoiseBackfill_ moves matching threads', function()
-  {
-    const jobs = fakeLabel('Career/Jobs', 0, 0);
-    const misc = fakeLabel('Misc', 0, 0);
-    const hits = [{id: 't1'}, {id: 't2'}];
-    const gw = fakeGateway({
-      labelsByName: {'Career/Jobs': jobs, 'Misc': misc},
-      searchResults: [hits, []]
-    });
-    linkedinNoiseBackfill_([], true,
-      {gw: gw, src: 'Career/Jobs', dst: 'Misc', query: 'q'});
-    assertEquals(misc.added.length, 2, 'Both threads should move to the destination');
-  }, results);
-
-  runTest('linkedinNoiseBackfill_ dry-run writes nothing', function()
-  {
-    const jobs = fakeLabel('Career/Jobs', 0, 0);
-    const misc = fakeLabel('Misc', 0, 0);
-    const gw = fakeGateway({
-      labelsByName: {'Career/Jobs': jobs, 'Misc': misc},
-      searchResults: [[{id: 't1'}], []]
-    });
-    linkedinNoiseBackfill_([], false,
-      {gw: gw, src: 'Career/Jobs', dst: 'Misc', query: 'q'});
-    assertEquals(misc.added.length, 0, 'Dry-run must not move anything');
-  }, results);
-
-  runTest('linkedinNoiseBackfill_ aborts when a label is missing', function()
-  {
-    const gw = fakeGateway({labelsByName: {'Career/Jobs': fakeLabel('Career/Jobs', 0, 0)}});
-    const out = [];
-    linkedinNoiseBackfill_(out, true,
-      {gw: gw, src: 'Career/Jobs', dst: 'Misc', query: 'q'});
-    assertEquals(gw.calls.searches, 0, 'Must not search before checking labels exist');
-    assert(out.join('\n').indexOf('ABORT') !== -1, 'Should abort loudly');
-  }, results);
 }
 
 // ============================================================================
