@@ -60,10 +60,11 @@ function authorize()
 }
 
 // ---------------------------------------------------------------------------
-// Gmail gateway — every Gmail call rebuildFilters_ makes.
+// Gmail gateway — every top-level Gmail call rebuildFilters_ and backup_ make.
+// Per-label reads go through the label objects it returns, not the gateway.
 //
-// rebuildFilters_ takes an optional `deps` argument; tests pass a fake gateway
-// plus fixture config so the real code path runs without touching the mailbox.
+// Both take an optional `deps` argument; tests pass a fake gateway
+// plus fixture config so the real code paths run without touching the mailbox.
 // Production callers omit it and get _GW below.
 //
 // The relabelling routes (passF_, passInbox_) call GmailApp directly and are
@@ -74,6 +75,10 @@ const _GW =
   listLabels: function()
   {
     return Gmail.Users.Labels.list('me').labels || [];
+  },
+  getUserLabels: function()
+  {
+    return GmailApp.getUserLabels();
   },
   listFilters: function()
   {

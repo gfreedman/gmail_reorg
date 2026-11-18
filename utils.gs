@@ -134,6 +134,50 @@ function getAllThreadsFromLabel(labelOrName)
 }
 
 /**
+ * Get every thread on a label, throwing if any page cannot be read.
+ *
+ * getAllThreadsFromLabel logs a failed page and returns what it has so far,
+ * which suits callers that are simply run again, such as migrations. A backup
+ * cannot work that way: a short list looks exactly like a complete one. Each
+ * page is retried on transient errors (see withRetry) before giving up.
+ *
+ * Callers pass no time budget: with the default settings the worst-case wait
+ * is about 8.5 seconds per failed page (1 + 2 + 4 seconds plus jitter), inside
+ * the 60-80 second margin both backups keep below the 6-minute limit. A retry
+ * abandoned for time would be misreported as a failed label.
+ *
+ * @param {GmailLabel} label - Label to read.
+ * @param {Object} [retryOpts] - Passed to withRetry; tests use it to shorten backoff.
+ * @return {GmailThread[]} Every thread on the label.
+ * @throws {Error} If a page still cannot be read after retrying.
+ */
+function getAllThreadsStrict(label, retryOpts)
+{
+  const threads = [];
+  const pageSize = CONSTANTS.THREAD_BATCH_SIZE;
+  const description = 'read threads of "' + label.getName() + '"';
+  let start = 0;
+
+  // Ends on the first page shorter than pageSize; a failed read throws out.
+  while (true)
+  {
+    const page = withRetry(function()
+    {
+      return label.getThreads(start, pageSize);
+    }, description, retryOpts) || [];
+    for (let i = 0; i < page.length; i++)
+    {
+      threads.push(page[i]);
+    }
+    if (page.length < pageSize)
+    {
+      return threads;
+    }
+    start += pageSize;
+  }
+}
+
+/**
  * Get thread count for a label (more efficient than getting all threads).
  * Uses a shortcut: if first batch is small, we have the count.
  *
@@ -322,6 +366,12 @@ function withRetry(fn, description, opts)
 function isTransientError(e)
 {
   const msg = ((e && e.message) || '').toLowerCase();
+  // Apps Script words some permanent failures as "a server error occurred ...
+  // PERMISSION_DENIED"; retrying those only wastes the backoff.
+  if (msg.indexOf('permission_denied') !== -1)
+  {
+    return false;
+  }
   return msg.indexOf('503') !== -1 ||
          msg.indexOf('500') !== -1 ||
          msg.indexOf('429') !== -1 ||
@@ -330,7 +380,9 @@ function isTransientError(e)
          msg.indexOf('backend error') !== -1 ||
          msg.indexOf('temporarily unavailable') !== -1 ||
          msg.indexOf('timed out') !== -1 ||
-         msg.indexOf('timeout') !== -1;
+         msg.indexOf('timeout') !== -1 ||
+         msg.indexOf('service error') !== -1 ||
+         msg.indexOf('server error occurred') !== -1;
 }
 
 // ============================================================================

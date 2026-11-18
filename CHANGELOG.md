@@ -8,9 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`getAllThreadsStrict`** (`utils.gs`) - reads every page of a label, retrying transient errors, and throws instead of returning a partial list
 - **README "Label colors" section** - one hue per group, sub-labels match the parent, and the parent-label requirement for sidebar nesting
 - **Transient-error retry helper** (`withRetry`, `isTransientError` in `utils.gs`)
-  - Exponential backoff with jitter for 503/500/429/rate-limit/timeout errors
+  - Exponential backoff with jitter for 503/500/429/rate-limit/timeout errors and Gmail's "Service error" / "server error occurred" messages, except PERMISSION_DENIED
   - Time-budget aware: aborts a retry instead of pushing past `MAX_RUNTIME_MS`
   - `onRetry` callback hook for telemetry; isolates callback failures from request flow
   - New `CONFIG.MAX_RETRIES` (default 4) and `CONFIG.RETRY_BASE_DELAY_MS` (default 1000) knobs
@@ -19,8 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`reorg_toolkit.gs`** — Web App toolkit for upkeep and diagnostics, exposed through a `doGet` router. Mutating routes are dry-run by default, take `&apply=1`, and are idempotent and time-budgeted
 - **Injectable Gmail gateway** (`_GW`, `_dep_`, `_depGw_`) so `rebuildFilters_` can be tested against a fake without touching a mailbox. `_depGw_` throws if a caller supplies `deps` without a gateway, rather than silently falling through to live Gmail
 - **Static filter-conflict detection** — Gmail runs every matching filter, so overlapping criteria double-label. `_specConflicts_` catches that before anything is written and aborts an `&apply=1` run
-- **Hand-edit protection** — `rebuildfilters` does not overwrite a filter whose labels or inbox setting were changed by hand; `&force=1` overrides
-- Test suites `testFilterSpec` and `testMutatingPaths` in `tests.gs` (47 cases), using injected fixtures so they run without the private configuration file
+- **Hand-edit protection** — without `&force=1`, `rebuildfilters` leaves alone a spec-sender filter that adds a label other than the spec's, has a different inbox setting, archives mail the spec keeps in the inbox, forwards mail, or has extra criteria such as a subject. A filter that adds no label and has none of those is treated as an orphan: deleted and recreated, keeping any other removed labels, and reported as FAILED if the recreate fails. A superseded filter is deleted unless it forwards mail or has extra criteria
+- Test suites `testFilterSpec` and `testMutatingPaths` in `tests.gs` (61 cases), using injected fixtures so they run without the private configuration file
 - `test/mutation_test.js` — mutation runner that breaks one guard at a time and asserts a test catches it
 - `?fn=selftest` route to run the whole suite over HTTP
 - `.claspignore` to keep `test/` out of the Apps Script push
@@ -47,6 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The gateway's `getLabel()` and `deleteLabel()` ops and the `fakeLabel` test helper, which only `driftmerge` used
 
 ### Fixed
+- **Silent backup failure** - both backups read labels through `getAllThreadsFromLabel`, which logs a failed page and returns a partial list, so a read error produced a short list that looked complete. They now use the new `getAllThreadsStrict`, which retries transient errors and then throws. `?fn=backup` marks a failed label `READ FAILED` and reports the run incomplete; `createBackup()` logs `BACKUP INCOMPLETE` with the labels it could not read and the threads it could not write, and no longer logs "Backup complete!" after stopping at the time limit
+- **Hand-made filters overwritten** - `rebuildfilters` treated any filter that added no label as an orphan and replaced it, so a hand-made filter on the same sender that forwarded mail, had an extra criterion, or archived mail the spec keeps in the inbox was rewritten, losing that setting or widening the filter. Such filters are now left alone unless `&force=1`
 - **Inert retry settings** - `_safeCall` passed hardcoded values to `withRetry`, so `CONFIG.MAX_RETRIES` and `CONFIG.RETRY_BASE_DELAY_MS` had no effect on any toolkit route
 - **Weak token generation** - Web App tokens came from `Math.random()`, whose state is recoverable from its outputs. Now built from `Utilities.getUuid()`, backed by `SecureRandom`
 - **Prototype pollution in tallies** - a sender whose domain is `__proto__` corrupted counts keyed on message headers. Twelve such maps now use `Object.create(null)`

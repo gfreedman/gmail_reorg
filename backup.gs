@@ -73,6 +73,10 @@ function createBackup()
   const processedThreadIds = Object.create(null);  // Track processed threads to avoid duplicates
   let row = 2;
   let skippedCount = 0;
+  const failedLabels = [];
+  // Null-prototype map keyed on thread IDs; an ID leaves the map once written.
+  const failedThreadIds = Object.create(null);
+  let timedOut = false;
 
   log('Found ' + labels.length + ' labels to process');
 
@@ -84,6 +88,7 @@ function createBackup()
     {
       logWarning('Time limit reached. This backup is PARTIAL: ' + (row - 2) + ' threads written. ' +
         'A rerun starts a new backup from the beginning.');
+      timedOut = true;
       break;
     }
 
@@ -95,11 +100,12 @@ function createBackup()
     let threads;
     try
     {
-      threads = getAllThreadsFromLabel(label);
+      threads = getAllThreadsStrict(label);
     }
     catch (e)
     {
       logError('Error getting threads from "' + labelName + '": ' + e.message);
+      failedLabels.push(labelName);
       continue;
     }
 
@@ -116,17 +122,20 @@ function createBackup()
         continue;
       }
 
-      processedThreadIds[threadId] = true;
-
       try
       {
         const rowData = extractThreadData(thread);
         sheet.getRange(row, 1, 1, rowData.length).setValues([rowData]);
         row++;
+        // Marked only once written, so a thread that fails here can still be
+        // picked up from another of its labels.
+        processedThreadIds[threadId] = true;
+        delete failedThreadIds[threadId];
       }
       catch (e)
       {
         logError('Error processing thread ' + threadId + ': ' + e.message);
+        failedThreadIds[threadId] = true;
       }
 
       // Flush periodically to prevent timeout and save progress
@@ -142,7 +151,28 @@ function createBackup()
   formatBackupSheet(sheet, headers.length);
 
   const totalThreads = row - 2;
-  log('Backup complete!');
+  const problems = [];
+  if (timedOut)
+  {
+    problems.push('stopped at the time limit');
+  }
+  if (failedLabels.length > 0)
+  {
+    problems.push(failedLabels.length + ' label(s) could not be read: ' + failedLabels.join(', '));
+  }
+  const failedThreads = Object.keys(failedThreadIds).length;
+  if (failedThreads > 0)
+  {
+    problems.push(failedThreads + ' thread(s) could not be written');
+  }
+  if (problems.length > 0)
+  {
+    logWarning('BACKUP INCOMPLETE — ' + problems.join('; ') + '. Do not rely on this backup.');
+  }
+  else
+  {
+    log('Backup complete!');
+  }
   log('Total unique threads: ' + totalThreads);
   log('Duplicate threads skipped: ' + skippedCount);
   log('Spreadsheet URL: ' + ss.getUrl());

@@ -289,6 +289,52 @@ function testFilterSpec(results)
       'User added skip-inbox; respect it');
   }, results);
 
+  runTest('_classifyFilter_ protects a filter that only forwards', function()
+  {
+    const prior = {criteria: {from: 'a@x.com'}, action: {forward: 'me@elsewhere.example'}};
+    assertEquals(_classifyFilter_(prior, R, true), 'manual',
+      'A rewrite would drop the forward');
+  }, results);
+
+  runTest('_classifyFilter_ protects a filter with an extra criterion', function()
+  {
+    const prior = {criteria: {from: 'a@x.com', subject: 'invoice'}, action: {}};
+    assertEquals(_classifyFilter_(prior, R, true), 'manual',
+      'A rewrite would drop the subject and widen the filter');
+  }, results);
+
+  runTest('_classifyFilter_ protects an archive-only filter for a sender kept in the inbox', function()
+  {
+    assertEquals(_classifyFilter_(filterWith([], ['INBOX']), R, false), 'manual',
+      'A rewrite would drop the archiving');
+  }, results);
+
+  runTest('_classifyFilter_ still repairs an archive-only orphan the spec also archives', function()
+  {
+    assertEquals(_classifyFilter_(filterWith([], ['INBOX']), R, true), 'repair',
+      'Nothing is lost: the rewrite keeps skip-inbox');
+  }, results);
+
+  runTest('_classifyFilter_ ignores a default size setting', function()
+  {
+    const prior = {criteria: {from: 'a@x.com', size: 0, sizeComparison: 'unspecified'}, action: {}};
+    assertEquals(_classifyFilter_(prior, R, true), 'repair', 'An API default is not user intent');
+  }, results);
+
+  runTest('_classifyFilter_ protects a real size rule', function()
+  {
+    const prior = {criteria: {from: 'a@x.com', size: 1000000, sizeComparison: 'larger'}, action: {}};
+    assertEquals(_classifyFilter_(prior, R, true), 'manual', 'A size rule is user intent');
+  }, results);
+
+  runTest('_classifyFilter_ ignores unmanaged fields that are empty', function()
+  {
+    const prior = {criteria: {from: 'a@x.com', subject: '', hasAttachment: false},
+      action: {addLabelIds: [], forward: ''}};
+    assertEquals(_classifyFilter_(prior, R, true), 'repair',
+      'Empty fields carry no user intent');
+  }, results);
+
   // --- signature keying ---
 
   runTest('_filterSig_ separates from and query criteria', function()
@@ -305,7 +351,7 @@ function testFilterSpec(results)
 /**
  * Build a fake Gmail gateway that records every write.
  *
- * @param {Object} state - {labels, filters, createError}
+ * @param {Object} state - {labels, filters, userLabels, createError}
  * @return {Object} Gateway with a .calls record
  */
 function fakeGateway(state)
@@ -316,6 +362,7 @@ function fakeGateway(state)
     calls: calls,
     listLabels: function() { return state.labels || []; },
     listFilters: function() { return state.filters || []; },
+    getUserLabels: function() { return state.userLabels || []; },
     createFilter: function(resource)
     {
       if (state.createError) { throw new Error(state.createError); }
@@ -656,6 +703,145 @@ function testMutatingPaths(results)
     assertEquals(gw.calls.created.length, 1, 'force should recreate it to spec');
   }, results);
 
+  runTest('rebuildFilters_ does not overwrite a filter that forwards mail', function()
+  {
+    const prior = {id: 'f1', criteria: {from: 'a@x.com'}, action: {forward: 'me@elsewhere.example'}};
+    const gw = fakeGateway({labels: LABELS, filters: [prior]});
+    const out = [];
+    rebuildFilters_(out, true, false, {gw: gw, spec: SPEC, superseded: []});
+    assertEquals(gatewayWrites(gw), 0, 'A forwarding filter must survive a rebuild');
+    assert(out.join('\n').indexOf('MANUAL') !== -1, 'Should report it as MANUAL');
+    assert(out.join('\n').indexOf('forwarding or extra criteria') !== -1, 'Should say why');
+  }, results);
+
+  runTest('rebuildFilters_ does not delete a superseded filter that forwards mail', function()
+  {
+    const stale = {id: 'old1', criteria: {from: 'narrow@x.com'}, action: {forward: 'me@elsewhere.example'}};
+    const gw = fakeGateway({labels: LABELS, filters: [stale]});
+    const out = [];
+    rebuildFilters_(out, true, false, {gw: gw, spec: SPEC, superseded: [{from: 'narrow@x.com'}]});
+    assertEquals(gw.calls.removedFilters.length, 0, 'A hand-made superseded filter must survive');
+    assert(out.join('\n').indexOf('MANUAL') !== -1, 'Should report it as MANUAL');
+  }, results);
+
+  // --- backup_ ---
+
+  /**
+   * Build a fake GmailLabel whose getThreads pages over generated thread ids.
+   *
+   * @param {string} name - Label name
+   * @param {number} count - Number of threads on the label
+   * @param {number} [failAt] - Throw when asked for a page starting here
+   * @return {Object} Fake label
+   */
+  function fakeBackupLabel(name, count, failAt)
+  {
+    return {
+      getName: function() { return name; },
+      getThreads: function(start, max)
+      {
+        if (failAt !== undefined && start >= failAt)
+        {
+          // Deliberately not a transient message, so withRetry gives up at once
+          // and selftest never sleeps through a real backoff.
+          throw new Error('Label read failed (permanent)');
+        }
+        const page = [];
+        for (let i = start; i < Math.min(start + max, count); i++)
+        {
+          const id = name + '#' + i;
+          page.push({getId: function() { return id; }});
+        }
+        return page;
+      }
+    };
+  }
+
+  /**
+   * Build a fake Script Properties store held in memory.
+   *
+   * @return {Object} Object with getProperty, setProperty and deleteProperty
+   */
+  function fakeProps()
+  {
+    const store = Object.create(null);
+    return {
+      getProperty: function(k) { return k in store ? store[k] : null; },
+      setProperty: function(k, v) { store[k] = v; },
+      deleteProperty: function(k) { delete store[k]; }
+    };
+  }
+
+  runTest('backup_ lists every thread id and declares the backup complete', function()
+  {
+    const gw = fakeGateway({userLabels: [fakeBackupLabel('A', 2), fakeBackupLabel('B', 0)]});
+    const out = [];
+    backup_(out, {gw: gw, props: fakeProps()});
+    const text = out.join('\n');
+    assert(text.indexOf('### A (2)') !== -1 && text.indexOf('A#0,A#1') !== -1, 'Should list A\'s ids');
+    assert(text.indexOf('### B (0)') !== -1, 'An empty label is listed as empty');
+    assert(text.indexOf('BACKUP COMPLETE') !== -1, 'Should declare success');
+  }, results);
+
+  runTest('backup_ reports a label it cannot read and refuses to declare success', function()
+  {
+    // The first page is full, so the failure is on the second page: exactly the
+    // case where a swallowed error would leave a plausible-looking partial list.
+    const pageSize = CONSTANTS.THREAD_BATCH_SIZE;
+    const gw = fakeGateway({userLabels: [fakeBackupLabel('A', pageSize + 5, pageSize)]});
+    const out = [];
+    backup_(out, {gw: gw, props: fakeProps()});
+    const text = out.join('\n');
+    assert(text.indexOf('READ FAILED') !== -1, 'Should mark the label as not backed up');
+    assert(text.indexOf('BACKUP INCOMPLETE') !== -1, 'Should report the run incomplete');
+    assert(text.indexOf('BACKUP COMPLETE') === -1, 'Must not declare success');
+  }, results);
+
+  runTest('backup_ refuses to use real Script Properties when props is not injected', function()
+  {
+    const gw = fakeGateway({userLabels: [fakeBackupLabel('A', 1)]});
+    let message = '';
+    try
+    {
+      backup_([], {gw: gw});
+    }
+    catch (e)
+    {
+      message = String(e && e.message);
+    }
+    assert(message.indexOf('refusing to use real Script Properties') !== -1,
+      'A test that forgets props must be refused by the guard, not crash later');
+  }, results);
+
+  runTest('getAllThreadsStrict retries a transient page error and succeeds', function()
+  {
+    let calls = 0;
+    const flaky = {
+      getName: function() { return 'Flaky'; },
+      getThreads: function(start, max)
+      {
+        calls++;
+        if (calls === 1)
+        {
+          throw new Error('Service error: Gmail');
+        }
+        return [{getId: function() { return 't1'; }}];
+      }
+    };
+    const threads = getAllThreadsStrict(flaky, {baseDelayMs: 1});
+    assertEquals(threads.length, 1, 'Should return the page read on retry');
+    assertEquals(calls, 2, 'Should have retried exactly once');
+  }, results);
+
+  runTest('backup_ pages past a full first page', function()
+  {
+    const pageSize = CONSTANTS.THREAD_BATCH_SIZE;
+    const gw = fakeGateway({userLabels: [fakeBackupLabel('A', pageSize + 3)]});
+    const out = [];
+    backup_(out, {gw: gw, props: fakeProps()});
+    assert(out.join('\n').indexOf('### A (' + (pageSize + 3) + ')') !== -1, 'Should count every thread');
+  }, results);
+
   // --- rebuildFilters_: failure reporting ---
 
   runTest('rebuildFilters_ reports a failed create instead of counting success', function()
@@ -979,6 +1165,15 @@ function testRetryHelpers(results)
   Logger.log('=== Retry Helper Tests ===');
 
   // --- isTransientError classification ---
+
+  runTest('isTransientError detects Gmail service and server errors', function()
+  {
+    assert(isTransientError(new Error('Service error: Gmail')), 'Service error should retry');
+    assert(isTransientError(new Error('We\'re sorry, a server error occurred. Please wait a bit and try again.')),
+      'Server error should retry');
+    assert(!isTransientError(new Error('A server error occurred while reading from storage. Error code PERMISSION_DENIED.')),
+      'A permission error is permanent');
+  }, results);
 
   runTest('isTransientError detects 503', function()
   {

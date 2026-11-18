@@ -799,12 +799,20 @@ function miscBreakdown_(out)
  * indistinguishable from a label that is genuinely empty.
  *
  * @param {Array<string>} out - Accumulator for output lines; returned to the caller as text.
+ * @param {Object} [deps] - Test injection point: {gw, props}. Production omits it.
+ * @throws {Error} If deps is supplied without props, so a test can never reach
+ *     the real Script Properties and clobber a real resume checkpoint.
  */
-function backup_(out)
+function backup_(out, deps)
 {
   const startTime = new Date().getTime();
-  const props = PropertiesService.getScriptProperties();
-  const labels = GmailApp.getUserLabels();
+  const gw = _depGw_(deps);
+  if (deps && !deps.props)
+  {
+    throw new Error('deps supplied without props — refusing to use real Script Properties');
+  }
+  const props = deps ? deps.props : PropertiesService.getScriptProperties();
+  const labels = gw.getUserLabels();
   let labelIdx = parseInt(props.getProperty('backup_labelIdx') || '0', 10);
   let failed = parseInt(props.getProperty('backup_failed') || '0', 10);
   if (labelIdx === 0)
@@ -828,7 +836,7 @@ function backup_(out)
     let ids = null;
     try
     {
-      ids = getAllThreadsFromLabel(label).map(function(t)
+      ids = getAllThreadsStrict(label).map(function(t)
       {
         return t.getId();
       });
@@ -1009,12 +1017,19 @@ function _specConflicts_(spec)
   });
 }
 
-// 'ok'     — matches spec exactly (extra removeLabelIds are allowed and preserved)
-// 'repair' — empty action: orphaned when the reorg deleted its target, no user intent to keep
-// 'manual' — its labels or inbox setting differ from the spec; not overwritten
-//            without &force=1
+// 'ok'     — adds exactly the spec's label with the spec's inbox setting (extra
+//            removeLabelIds, forwarding or criteria are left as they are)
+// 'repair' — adds no label and carries nothing else hand-made: orphaned when the
+//            reorg deleted its target, so there is no user intent to keep
+// 'manual' — anything else, including a filter that forwards mail, has extra
+//            criteria such as a subject, or archives mail the spec keeps in the
+//            inbox; not overwritten without &force=1
 /**
  * Decide whether an existing filter is correct, repairable, or hand-edited.
+ *
+ * Matching is by from+query only, and a rewrite keeps only removeLabelIds, so
+ * a filter with any other action or criterion must never count as repairable:
+ * overwriting it would drop a forward or widen the filter.
  *
  * @param {Object} prior - Existing Gmail filter resource.
  * @param {string} want - Label id the spec expects.
@@ -1030,7 +1045,10 @@ function _classifyFilter_(prior, want, skipInbox)
   {
     return 'ok';
   }
-  if (adds.length === 0)
+  // An orphan that archived its mail (removes INBOX) for a sender the spec keeps
+  // in the inbox: a rewrite would drop the archiving, so it is not an orphan to fix.
+  const dropsArchive = !skipInbox && rem.indexOf('INBOX') !== -1;
+  if (adds.length === 0 && !dropsArchive && !_hasUnmanagedSettings_(prior))
   {
     return 'repair';
   }
@@ -1038,11 +1056,52 @@ function _classifyFilter_(prior, want, skipInbox)
 }
 
 /**
+ * Report whether a filter carries settings a rebuild would not recreate.
+ *
+ * A rebuild writes only from/query criteria, addLabelIds and removeLabelIds.
+ * Any other criterion (to, subject, hasAttachment...) or action (forward) with a
+ * value set is something a person configured. A value counts as unset if it is
+ * undefined, null, an empty string or false. size and sizeComparison count only
+ * when sizeComparison is 'larger' or 'smaller', so an API default such as
+ * 'unspecified' with size 0 cannot block a repair.
+ *
+ * @param {Object} prior - Existing Gmail filter resource.
+ * @return {boolean} True if any unmanaged criterion or action is set.
+ */
+function _hasUnmanagedSettings_(prior)
+{
+  const managedCriteria = ['from', 'query'];
+  const managedActions = ['addLabelIds', 'removeLabelIds'];
+  const sizeFields = ['size', 'sizeComparison'];
+  /**
+   * @param {*} v - Field value.
+   * @return {boolean} False for undefined, null, '' and false.
+   */
+  const isSet = function(v)
+  {
+    return v !== undefined && v !== null && v !== '' && v !== false;
+  };
+  const criteria = prior.criteria || {};
+  const action = prior.action || {};
+  const sizeRule = criteria.sizeComparison === 'larger' || criteria.sizeComparison === 'smaller';
+  const extraCriteria = sizeRule || Object.keys(criteria).some(function(k)
+  {
+    return managedCriteria.indexOf(k) === -1 && sizeFields.indexOf(k) === -1 && isSet(criteria[k]);
+  });
+  const extraAction = Object.keys(action).some(function(k)
+  {
+    return managedActions.indexOf(k) === -1 && isSet(action[k]);
+  });
+  return extraCriteria || extraAction;
+}
+
+/**
  * Bring the account's delivery filters in line with _FILTER_SPEC.
  *
  * Refuses to write a spec that would double-label, does not overwrite a filter
- * whose labels or inbox setting were changed by hand unless forced, and reports a failed write rather than
- * counting it as a success.
+ * someone configured by hand (different labels or inbox setting, forwarding, or
+ * extra criteria) unless forced, and reports a failed write rather than counting
+ * it as a success.
  *
  * @param {Array<string>} out - Accumulator for output lines; returned to the caller as text.
  * @param {boolean} apply - False for a dry run that only reports; true to execute.
@@ -1146,8 +1205,9 @@ function rebuildFilters_(out, apply, force, deps)
       if (state === 'manual' && !force)
       {
         out.push('MANUAL  ' + desc);
-        out.push('        hand-edited: add=[' + adds.join(',') + '] remove=[' + rem.join(',') +
-          '] — left alone, re-run with &force=1 to overwrite');
+        out.push('        hand-edited: add=[' + adds.join(',') + '] remove=[' + rem.join(',') + ']' +
+          (_hasUnmanagedSettings_(prior) ? ' plus forwarding or extra criteria' : '') +
+          ' — left alone, re-run with &force=1 to overwrite');
         skipped++;
         continue;
       }
@@ -1239,6 +1299,13 @@ function rebuildFilters_(out, apply, force, deps)
       continue;
     }
     touched[stale.id] = true;
+    if (_hasUnmanagedSettings_(stale) && !force)
+    {
+      out.push('MANUAL  superseded ' + label + ' has forwarding or extra criteria — left alone,' +
+        ' re-run with &force=1 to delete');
+      skipped++;
+      continue;
+    }
     if (!apply)
     {
       out.push('WOULD DELETE ' + label + '  (' + stale.id + ')');
