@@ -134,6 +134,44 @@ function getAllThreadsFromLabel(labelOrName)
 }
 
 /**
+ * Get every thread on a label, throwing if any page cannot be read.
+ *
+ * getAllThreadsFromLabel logs a failed page and returns what it has so far,
+ * which suits callers that are simply run again, such as migrations. A backup
+ * cannot work that way: a short list looks exactly like a complete one. Each
+ * page is retried on transient errors (see withRetry) before giving up.
+ *
+ * @param {GmailLabel} label - Label to read.
+ * @param {Object} [retryOpts] - Passed to withRetry, e.g. {runStartTime, maxRuntimeMs}.
+ * @return {GmailThread[]} Every thread on the label.
+ * @throws {Error} If a page still cannot be read after retrying.
+ */
+function getAllThreadsStrict(label, retryOpts)
+{
+  const threads = [];
+  const pageSize = CONSTANTS.THREAD_BATCH_SIZE;
+  let start = 0;
+
+  // Ends on the first page shorter than pageSize; a failed read throws out.
+  while (true)
+  {
+    const page = withRetry(function()
+    {
+      return label.getThreads(start, pageSize);
+    }, 'read threads of "' + label.getName() + '"', retryOpts) || [];
+    for (let i = 0; i < page.length; i++)
+    {
+      threads.push(page[i]);
+    }
+    if (page.length < pageSize)
+    {
+      return threads;
+    }
+    start += pageSize;
+  }
+}
+
+/**
  * Get thread count for a label (more efficient than getting all threads).
  * Uses a shortcut: if first batch is small, we have the count.
  *

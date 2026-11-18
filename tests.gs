@@ -303,6 +303,30 @@ function testFilterSpec(results)
       'A rewrite would drop the subject and widen the filter');
   }, results);
 
+  runTest('_classifyFilter_ protects an archive-only filter for a sender kept in the inbox', function()
+  {
+    assertEquals(_classifyFilter_(filterWith([], ['INBOX']), R, false), 'manual',
+      'A rewrite would drop the archiving');
+  }, results);
+
+  runTest('_classifyFilter_ still repairs an archive-only orphan the spec also archives', function()
+  {
+    assertEquals(_classifyFilter_(filterWith([], ['INBOX']), R, true), 'repair',
+      'Nothing is lost: the rewrite keeps skip-inbox');
+  }, results);
+
+  runTest('_classifyFilter_ ignores a default size setting', function()
+  {
+    const prior = {criteria: {from: 'a@x.com', size: 0, sizeComparison: 'unspecified'}, action: {}};
+    assertEquals(_classifyFilter_(prior, R, true), 'repair', 'An API default is not user intent');
+  }, results);
+
+  runTest('_classifyFilter_ protects a real size rule', function()
+  {
+    const prior = {criteria: {from: 'a@x.com', size: 1000000, sizeComparison: 'larger'}, action: {}};
+    assertEquals(_classifyFilter_(prior, R, true), 'manual', 'A size rule is user intent');
+  }, results);
+
   runTest('_classifyFilter_ ignores unmanaged fields that are empty', function()
   {
     const prior = {criteria: {from: 'a@x.com', subject: '', hasAttachment: false},
@@ -687,6 +711,7 @@ function testMutatingPaths(results)
     rebuildFilters_(out, true, false, {gw: gw, spec: SPEC, superseded: []});
     assertEquals(gatewayWrites(gw), 0, 'A forwarding filter must survive a rebuild');
     assert(out.join('\n').indexOf('MANUAL') !== -1, 'Should report it as MANUAL');
+    assert(out.join('\n').indexOf('forwarding or extra criteria') !== -1, 'Should say why');
   }, results);
 
   // --- backup_ ---
@@ -758,6 +783,22 @@ function testMutatingPaths(results)
     assert(text.indexOf('READ FAILED') !== -1, 'Should mark the label as not backed up');
     assert(text.indexOf('BACKUP INCOMPLETE') !== -1, 'Should report the run incomplete');
     assert(text.indexOf('BACKUP COMPLETE') === -1, 'Must not declare success');
+  }, results);
+
+  runTest('backup_ refuses to use real Script Properties when props is not injected', function()
+  {
+    const gw = fakeGateway({userLabels: [fakeBackupLabel('A', 1)]});
+    let message = '';
+    try
+    {
+      backup_([], {gw: gw});
+    }
+    catch (e)
+    {
+      message = String(e && e.message);
+    }
+    assert(message.indexOf('refusing to use real Script Properties') !== -1,
+      'A test that forgets props must be refused by the guard, not crash later');
   }, results);
 
   runTest('backup_ pages past a full first page', function()

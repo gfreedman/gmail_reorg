@@ -73,6 +73,8 @@ function createBackup()
   const processedThreadIds = Object.create(null);  // Track processed threads to avoid duplicates
   let row = 2;
   let skippedCount = 0;
+  const failedLabels = [];
+  let timedOut = false;
 
   log('Found ' + labels.length + ' labels to process');
 
@@ -84,6 +86,7 @@ function createBackup()
     {
       logWarning('Time limit reached. This backup is PARTIAL: ' + (row - 2) + ' threads written. ' +
         'A rerun starts a new backup from the beginning.');
+      timedOut = true;
       break;
     }
 
@@ -95,11 +98,12 @@ function createBackup()
     let threads;
     try
     {
-      threads = getAllThreadsFromLabel(label);
+      threads = getAllThreadsStrict(label);
     }
     catch (e)
     {
       logError('Error getting threads from "' + labelName + '": ' + e.message);
+      failedLabels.push(labelName);
       continue;
     }
 
@@ -142,7 +146,17 @@ function createBackup()
   formatBackupSheet(sheet, headers.length);
 
   const totalThreads = row - 2;
-  log('Backup complete!');
+  if (timedOut || failedLabels.length > 0)
+  {
+    logWarning('BACKUP INCOMPLETE — ' + (timedOut ? 'stopped at the time limit' : '') +
+      (timedOut && failedLabels.length > 0 ? '; ' : '') +
+      (failedLabels.length > 0 ? failedLabels.length + ' label(s) could not be read: ' +
+        failedLabels.join(', ') : '') + '. Do not rely on this backup.');
+  }
+  else
+  {
+    log('Backup complete!');
+  }
   log('Total unique threads: ' + totalThreads);
   log('Duplicate threads skipped: ' + skippedCount);
   log('Spreadsheet URL: ' + ss.getUrl());

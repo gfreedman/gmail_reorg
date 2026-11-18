@@ -60,7 +60,8 @@ function authorize()
 }
 
 // ---------------------------------------------------------------------------
-// Gmail gateway — every global Gmail call rebuildFilters_ and backup_ make.
+// Gmail gateway — every top-level Gmail call rebuildFilters_ and backup_ make.
+// Per-label reads go through the label objects it returns, not the gateway.
 //
 // Both take an optional `deps` argument; tests pass a fake gateway
 // plus fixture config so the real code paths run without touching the mailbox.
