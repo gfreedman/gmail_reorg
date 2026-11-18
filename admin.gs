@@ -37,6 +37,8 @@ function setWebAppToken()
 {
   const token = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
   PropertiesService.getScriptProperties().setProperty(_TOKEN_PROPERTY, token);
+  // The editor's Run button discards return values; the execution log is the only place it shows.
+  Logger.log('New Web App token: ' + token);
   return token;
 }
 
