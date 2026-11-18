@@ -57,30 +57,20 @@ function authorize()
 }
 
 // ---------------------------------------------------------------------------
-// Gmail gateway — every global Gmail entry point the mutating routes use.
+// Gmail gateway — every Gmail call rebuildFilters_ makes.
 //
-// Note the boundary: this covers the global services (GmailApp, Gmail). The
-// label objects getLabel() hands back carry their own Gmail methods
-// (getThreads, addToThreads, removeFromThreads), so tests substitute those too
-// via fakeLabel — the gateway alone is not a complete isolation boundary.
+// rebuildFilters_ takes an optional `deps` argument; tests pass a fake gateway
+// plus fixture config so the real code path runs without touching the mailbox.
+// Production callers omit it and get _GW below.
 //
-// Every mutating function takes an optional `deps` argument; tests pass a fake
-// gateway plus fixture config so the real code paths run without touching the
-// mailbox. Production callers omit it and get _GW below.
+// The relabelling routes (passF_, passInbox_) call GmailApp directly and are
+// not covered by these tests.
 // ---------------------------------------------------------------------------
 const _GW =
 {
   listLabels: function()
   {
     return Gmail.Users.Labels.list('me').labels || [];
-  },
-  getLabel: function(name)
-  {
-    return GmailApp.getUserLabelByName(name);
-  },
-  deleteLabel: function(label)
-  {
-    return GmailApp.deleteLabel(label);
   },
   listFilters: function()
   {
