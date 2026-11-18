@@ -36,8 +36,11 @@ const BACKUP_CONFIG =
 // ============================================================================
 
 /**
- * Main function to create a backup spreadsheet of all Gmail labels and threads.
- * Creates a new spreadsheet in your Google Drive with complete email inventory.
+ * Create a backup spreadsheet of every labelled thread.
+ *
+ * Writes one row per thread that carries at least one user label; unlabelled
+ * threads are not included. If time runs out the backup stops early and logs
+ * a warning; a rerun starts a fresh spreadsheet from the beginning.
  *
  * @return {string} URL of the created spreadsheet
  */
@@ -65,10 +68,8 @@ function createBackup()
   sheet.setFrozenRows(1);
 
   const labels = GmailApp.getUserLabels();
-  // Null-prototype map: the keys below come from message headers or label names,
-  // which are outside our control. On a plain object a key of __proto__ or
-  // constructor resolves to something on Object.prototype instead of a own
-  // property, silently corrupting the tally.
+  // Null-prototype map keyed on thread IDs, so a key can never collide with
+  // something on Object.prototype such as __proto__ or constructor.
   const processedThreadIds = Object.create(null);  // Track processed threads to avoid duplicates
   let row = 2;
   let skippedCount = 0;
@@ -81,7 +82,8 @@ function createBackup()
     // Check time remaining before processing each label
     if (!hasTimeRemaining(startTime, BACKUP_CONFIG.MAX_RUNTIME_MS))
     {
-      logWarning('Time limit approaching. Processed ' + (row - 2) + ' threads. Run again to continue.');
+      logWarning('Time limit reached. This backup is PARTIAL: ' + (row - 2) + ' threads written. ' +
+        'A rerun starts a new backup from the beginning.');
       break;
     }
 
@@ -357,9 +359,9 @@ function backupUnreadEmails()
  * Backup emails from a specific date range.
  * Useful for archiving specific time periods.
  *
- * @param {Date} startDate - Start of date range
- * @param {Date} endDate - End of date range
- * @return {string} URL of the created spreadsheet
+ * @param {Date} startDate - Start of date range (inclusive)
+ * @param {Date} endDate - End of date range (exclusive, as Gmail's before: is)
+ * @return {string|null} URL of the created spreadsheet, or null if a date is missing
  */
 function backupDateRange(startDate, endDate)
 {

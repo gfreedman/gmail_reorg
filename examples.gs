@@ -4,7 +4,7 @@
  * This file contains ready-to-use example functions.
  * Copy and modify these for your specific needs.
  *
- * REQUIRES: utils.gs (must be loaded first)
+ * REQUIRES: utils.gs (must be loaded first) and analysis.gs
  */
 
 // ============================================================================
@@ -172,8 +172,8 @@ function example_listRootLabels()
 // ============================================================================
 
 /**
- * EXAMPLE 4: Apply Minimal Organization
- * Creates just 5 top-level categories.
+ * EXAMPLE 4: Preview a Minimal Organization
+ * Logs a 5-category plan to copy into reorganization.gs; changes nothing.
  * Good starting point for simple organization.
  */
 function example_minimalPlan()
@@ -364,7 +364,8 @@ function example_generatePatternMigrations()
 /**
  * EXAMPLE 9: Count Threads by Category Pattern
  * See how many threads would go to each category.
- * Uses CATEGORY_PATTERNS from analysis.gs for consistency.
+ * Uses the category names and keywords from CATEGORY_PATTERNS in analysis.gs.
+ * It ignores the domain patterns, so counts can differ from detectCategory.
  */
 function example_categoryDistribution()
 {

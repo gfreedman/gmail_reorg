@@ -29,10 +29,11 @@ const CONFIG =
   // Whether to show detailed progress logs
   VERBOSE: true,
 
-  // Maximum retry attempts for transient errors (503, 429, timeouts) per batch
+  // Maximum attempts per batch for transient errors (503, 429, timeouts),
+  // counting the first try: 4 means up to 3 retries
   MAX_RETRIES: 4,
 
-  // Initial backoff between retries (ms). Doubles each attempt: 1s, 2s, 4s, 8s + jitter
+  // Initial backoff between retries (ms). Doubles each retry: 1s, 2s, 4s, plus jitter
   RETRY_BASE_DELAY_MS: 1000
 };
 
@@ -390,7 +391,7 @@ function migrateLabels(batchStats)
  * @param {string} fromLabelName - Source label name
  * @param {string} toLabelName - Destination label name
  * @param {Object} batchStats - Running stats object for this batch
- * @return {Object} {success: boolean, threadCount: number, error: string}
+ * @return {Object} {success: boolean, threadCount: number, error: string|null}
  */
 function migrateSingleLabel(fromLabelName, toLabelName, batchStats)
 {
@@ -588,6 +589,8 @@ function showBatchSummary(batchStats)
 /**
  * Quick validation of the organization plan.
  * Run this before main() to check for issues.
+ *
+ * @return {boolean} True if the plan has no errors.
  */
 function validatePlan()
 {

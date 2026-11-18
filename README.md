@@ -13,7 +13,7 @@ A Google Apps Script library for backing up, analyzing, and reorganizing Gmail l
 
 ### 2. Add the script files
 
-Go to File > New > Script and create these files. Paste the contents from this repo into each one.
+In the editor, click **+** next to **Files**, choose **Script**, and create these files. Paste the contents from this repo into each one.
 
 | File | Purpose |
 |------|---------|
@@ -21,8 +21,11 @@ Go to File > New > Script and create these files. Paste the contents from this r
 | `backup.gs` | Backup functions |
 | `analysis.gs` | Label analysis |
 | `reorganization.gs` | Migration execution |
-| `tests.gs` | Test suite (optional) |
+| `examples.gs` | Ready-to-run example scripts (optional) |
+| `tests.gs` | Test suite (optional; two of its suites test the toolkit, so they need `reorg_toolkit.gs` and `admin.gs`) |
 | `reorg_toolkit.gs` | Web App toolkit for upkeep and diagnostics (optional) |
+| `admin.gs` | Toolkit setup functions you run by hand (optional, needs `reorg_toolkit.gs`) |
+| `appsscript.json` | Project manifest: turns on the Gmail advanced service the toolkit uses, and the Web App settings. Paste it over the project's own manifest (Project Settings > Show "appsscript.json") |
 
 `utils.gs` must be the first file listed in your project.
 
@@ -67,7 +70,7 @@ The report shows label counts, empty labels, likely duplicates, and suggested gr
 Edit `ORGANIZATION_PLAN` in `reorganization.gs`:
 
 ```javascript
-var ORGANIZATION_PLAN = {
+const ORGANIZATION_PLAN = {
   newLabels: [
     'Personal',
     'Personal/Family',
@@ -165,10 +168,26 @@ Skip this unless you are deploying `reorg_toolkit.gs` as a Web App. The library
 does not need any of it.
 
 The toolkit runs behind a shared secret and fails closed: until you mint a token,
-every route returns `DENIED`. Both setup functions live in `admin.gs`.
+every route returns `DENIED`. The setup functions live in `admin.gs`.
 
-**1. Mint a token.** Select `admin.gs` in the editor, run `setWebAppToken()`, and
-keep what it returns. It is shown once.
+**0. Add your configuration.** Create `_private_data.gs` with your sender rules
+and label names. Without it, most routes stop with a `ReferenceError` naming
+the missing constant.
+
+**1. Deploy.** Make sure `appsscript.json` from this repo is in the project, then
+choose **Deploy > New deployment**, type **Web app**, execute as **Me**, access
+**Anyone**. Copy the deployment URL. After a code change, publish it as a new
+version of the same deployment (**Deploy > Manage deployments**, edit, **Version:
+New version**) to keep the URL. Each deployment keeps running the code it was
+given, so archive any you no longer use.
+
+**2. Grant filter access.** Select `admin.gs` and run `authorize()` once,
+approving the consent screen. The `listfilters` and `rebuildfilters` routes need
+it; the Web App cannot ask for that permission itself.
+
+**3. Mint a token.** Select `admin.gs` in the editor, run `setWebAppToken()`, and
+copy the token from the execution log. The editor's Run button discards return
+values, so the log is the only place it appears.
 
 ```
 https://script.google.com/macros/s/<deployment>/exec?fn=counts&token=<token>
@@ -178,8 +197,9 @@ Every route needs `&token=`. Mutating routes stay dry runs until you add
 `&apply=1`. To rotate, run the same function again; the old token stops working
 immediately.
 
-**2. Schedule the upkeep.** Run `installMaintenanceTrigger()` once. It installs a
-daily trigger that labels inbox threads carrying no plan label. The trigger runs
+**4. Schedule the upkeep.** Run `installMaintenanceTrigger()` once. It installs a
+daily trigger that labels inbox threads that have no filing label yet, and
+leaves suspected spam alone. The trigger runs
 inside the project rather than over HTTP, so it needs no token and no machine
 left awake. It labels only, never archiving or trashing, and running it a second
 time replaces the trigger instead of adding another.
@@ -197,23 +217,27 @@ time replaces the trigger instead of adding another.
 | `?fn=selftest` | Deployed Web App; returns a pass/fail summary |
 | `node test/mutation_test.js` | A clone; no Apps Script needed |
 
-The first two run the suite in `tests.gs`. The third also disables each safety
-check in turn to confirm a test catches it, and prints `SURVIVED` for any guard
-that nothing covers. Run it after touching a guard. It loads the `.gs` files into
-a sandboxed scope with the Apps Script globals stubbed, so it never reaches
-Gmail, and it stubs the private configuration too.
+The first two run every suite in `tests.gs`. The third, which is what CI runs,
+runs only the two toolkit suites (filter rules and the write paths), then
+disables each toolkit safety check in turn to confirm a test catches it, and
+prints `SURVIVED` for any guard that nothing covers. Run it after touching a
+guard. It loads the `.gs` files into a sandboxed scope with the Apps Script
+globals stubbed, so it never reaches Gmail, and it stubs the private
+configuration when `_private_data.gs` is absent.
 
 ## Configuration
 
 Edit `CONFIG` in `reorganization.gs`:
 
 ```javascript
-var CONFIG = {
-  DRY_RUN: true,          // set false only when ready to run live
-  BATCH_SIZE: 100,        // threads per batch — reduce if hitting rate limits
-  MAX_RUNTIME_MS: 300000, // stops before the 6-minute Apps Script limit
-  SKIP_COMPLETED: true,   // skips migrations already done
-  VERBOSE: true           // detailed logging
+const CONFIG = {
+  DRY_RUN: true,            // set false only when ready to run live
+  BATCH_SIZE: 100,          // threads per batch — reduce if hitting rate limits
+  MAX_RUNTIME_MS: 300000,   // stops before the 6-minute Apps Script limit
+  SKIP_COMPLETED: true,     // skips migrations already done
+  VERBOSE: true,            // detailed logging
+  MAX_RETRIES: 4,           // attempts per batch for 503/429/timeouts, first try included
+  RETRY_BASE_DELAY_MS: 1000 // first backoff; doubles each retry, plus jitter
 };
 ```
 
@@ -228,10 +252,9 @@ newLabels: ['Personal', 'Work', 'Finance', 'Shopping', 'Archive']
 ```javascript
 newLabels: [
   'Personal', 'Personal/Family', 'Personal/Health',
-  'Work', 'Work/Projects', 'Work/Clients',
-  'Finance', 'Finance/Banking', 'Finance/Taxes',
-  'Shopping', 'Shopping/Orders', 'Shopping/Receipts',
-  'Travel', 'Learning', 'Newsletters', 'Archive'
+  'Work', 'Work/Projects',
+  'Finance', 'Finance/Taxes',
+  'Archive'
 ]
 ```
 
@@ -278,7 +301,7 @@ To remove a color completely, use "Remove color" in the Gmail label menu.
 
 **"Exceeded maximum execution time"** — Normal for large mailboxes. Run `main()` again and it will resume automatically.
 
-**"Service invoked too many times"** — Gmail rate limit. The library auto-retries transient errors (503/500/429/rate-limit/timeout) with exponential backoff up to `CONFIG.MAX_RETRIES` times per batch, and aborts a retry if the backoff would exceed the runtime budget. If a batch still exhausts retries, the failed migration isn't marked complete — re-running `main()` will retry it. Reducing `BATCH_SIZE` helps if it keeps happening. The batch summary reports `Transient errors retried: N` so you can see how busy the retry path was.
+**"Service invoked too many times"** — Gmail rate limit. The library auto-retries transient errors (503/500/429/rate-limit/timeout) with exponential backoff, making up to `CONFIG.MAX_RETRIES` attempts per batch, and aborts a retry if the backoff would exceed the runtime budget. If a batch still exhausts retries, the failed migration isn't marked complete — re-running `main()` will retry it. Reducing `BATCH_SIZE` helps if it keeps happening. The batch summary reports `Transient errors retried: N` so you can see how busy the retry path was.
 
 **"Label not found"** — The source label doesn't exist or the name is slightly off. Run `listAllLabelsDetailed()` to see exact names.
 
@@ -288,9 +311,11 @@ To remove a color completely, use "Remove color" in the Gmail label menu.
 
 ## Design notes
 
-**Dry runs by default.** Every mutating operation reports what it would do and
-needs an explicit flag to act. Runs are idempotent and checkpointed, so hitting
-the 6-minute limit mid-migration is not a problem: run it again.
+**Dry runs by default.** Mutating operations report what they would do and need
+an explicit flag to act. The exceptions are the scheduled maintenance, which
+only adds labels, and the toolkit's `passFreset`, which only clears a saved
+position. Migrations are idempotent and checkpointed, so hitting the 6-minute
+limit mid-migration is not a problem: run it again.
 
 **Filing belongs in Gmail, not a mail client.** An earlier version of this setup
 used client-side rules in a desktop mail app. Those only run while that machine
@@ -303,8 +328,8 @@ notifications are filed and hidden. Anything a person typed is filed and left in
 the inbox. Burying a message from a person costs far more than leaving a
 newsletter visible, so the rule is asymmetric.
 
-**Logic is committed, configuration is not.** Sender rules, label names and
-thread ids live in a git-ignored file; the code that reads them is in the repo.
+**Logic is committed, configuration is not.** Sender rules and label names
+live in a git-ignored file; the code that reads them is in the repo.
 Personal data never enters git, and a missing configuration raises straight away
 instead of producing a run that does nothing and reports success.
 
@@ -318,7 +343,7 @@ coverage, one of which was never wired in.
 - Google Apps Script has a 6-minute execution limit. The script handles this automatically with batch processing and auto-resume.
 - Gmail rate limits can slow things down on large mailboxes. Reduce `BATCH_SIZE` and rerun if needed.
 - System labels (Inbox, Sent, Drafts, Spam) cannot be modified — Gmail doesn't expose them to Apps Script.
-- Label names can't contain `<`, `>`, or `&`.
+- This library refuses label names containing `&`, `<`, `>`, `[`, `]`, `{` or `}`.
 
 ## Privacy
 

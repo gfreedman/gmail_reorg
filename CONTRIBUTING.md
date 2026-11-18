@@ -26,7 +26,9 @@
 - Use `Object.keys()` rather than `for...in`
 - Batch all Gmail API calls — never operate per-thread in a loop
 - Allman brace style (opening brace on its own line), including object literals
-  and anonymous functions; no single-line blocks
+  and anonymous functions; no single-line blocks. One exception: keep `return {`
+  on one line, because a line break after `return` makes JavaScript return
+  `undefined`
 - Anonymous functions are `function(x)`, with no space before the paren
 - Name magic numbers. If two call sites need different limits, say why in a comment
 - Never key an object on data from a message header without `Object.create(null)`

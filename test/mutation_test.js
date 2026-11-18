@@ -1,5 +1,5 @@
 /**
- * Mutation tests for the mutating routes in reorg_toolkit.gs.
+ * Mutation tests for the toolkit's safety guards in reorg_toolkit.gs and admin.gs.
  *
  * A passing test suite only means something if it fails when the code breaks.
  * This deliberately breaks one guard at a time and asserts that the expected
@@ -78,12 +78,26 @@ const MUTATIONS = [
  * @param {string} literal - Source snippet to match
  * @return {RegExp} Whitespace-tolerant pattern
  */
-function anchor(literal) {
+function anchor(literal)
+{
   const escaped = literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(escaped.replace(/\s+/g, '\\s+'));
 }
 
-function runSuite(sources) {
+/**
+ * Load the toolkit, its tests and stubbed Apps Script globals into one scope
+ * and run the toolkit test suites.
+ *
+ * Apps Script evaluates every .gs file into a single global scope; concatenating
+ * the sources into one Function body reproduces that.
+ *
+ * @param {{toolkit: string, admin: string}} sources - Source text of
+ *     reorg_toolkit.gs and admin.gs, possibly mutated
+ * @return {{passed: number, failed: number, errors: Array<Object>}} Suite
+ *     results; failed is -1 if the sources did not load
+ */
+function runSuite(sources)
+{
   const utils = fs.readFileSync(R + 'utils.gs', 'utf8');
   const tests = fs.readFileSync(R + 'tests.gs', 'utf8');
   // _private_data.gs is git-ignored, so a clean clone will not have it. The
@@ -123,8 +137,6 @@ function runSuite(sources) {
         };
       }
     };
-    var _unusedProps = {},
-        SpreadsheetApp = {}, DriveApp = {};
   `;
   const body = prelude + priv + '\n' + utils + '\n' + sources.toolkit + '\n' + sources.admin + '\n' + tests + `
     var results = {passed: 0, failed: 0, errors: []};
@@ -132,8 +144,14 @@ function runSuite(sources) {
     testMutatingPaths(results);
     return results;
   `;
-  try { return new Function(body)(); }
-  catch (e) { return {passed: 0, failed: -1, errors: [{test: 'LOAD', error: e.message}]}; }
+  try
+  {
+    return new Function(body)();
+  }
+  catch (e)
+  {
+    return {passed: 0, failed: -1, errors: [{test: 'LOAD', error: e.message}]};
+  }
 }
 
 // Mutations may target any source file, not just the toolkit: the maintenance
@@ -141,9 +159,20 @@ function runSuite(sources) {
 // reported those mutants as "anchor not found".
 const MUTABLE = ['reorg_toolkit.gs', 'admin.gs'];
 const clean = {};
-MUTABLE.forEach(function (f) { clean[f] = fs.readFileSync(R + f, 'utf8'); });
+MUTABLE.forEach(function(f)
+{
+  clean[f] = fs.readFileSync(R + f, 'utf8');
+});
 
-function sourcesFrom(overrides) {
+/**
+ * Build the source set for one suite run, substituting any mutated files.
+ *
+ * @param {Object<string, string>|null} overrides - Mutated source text keyed
+ *     by file name, or null for the unmodified sources
+ * @return {{toolkit: string, admin: string}} Sources to pass to runSuite
+ */
+function sourcesFrom(overrides)
+{
   return {
     toolkit: (overrides && overrides['reorg_toolkit.gs']) || clean['reorg_toolkit.gs'],
     admin: (overrides && overrides['admin.gs']) || clean['admin.gs']
@@ -152,21 +181,38 @@ function sourcesFrom(overrides) {
 
 const base = runSuite(sourcesFrom(null));
 console.log('baseline: ' + base.passed + ' passed, ' + base.failed + ' failed');
-if (base.failed !== 0) { console.log(JSON.stringify(base.errors, null, 2)); process.exit(1); }
+if (base.failed !== 0)
+{
+  console.log(JSON.stringify(base.errors, null, 2));
+  process.exit(1);
+}
 
 let survivors = 0;
-MUTATIONS.forEach(function (m) {
+MUTATIONS.forEach(function(m)
+{
   const [name, find, repl, expect] = m;
   const pattern = anchor(find);
-  const target = MUTABLE.find(function (f) { return pattern.test(clean[f]); });
-  if (!target) { console.log('SKIP  ' + name + ' — anchor not found'); survivors++; return; }
+  const target = MUTABLE.find(function(f)
+  {
+    return pattern.test(clean[f]);
+  });
+  if (!target)
+  {
+    console.log('SKIP  ' + name + ' — anchor not found');
+    survivors++;
+    return;
+  }
   const overrides = {};
   overrides[target] = clean[target].replace(pattern, repl);
   const r = runSuite(sourcesFrom(overrides));
   const failedNames = r.errors.map(e => e.test).join(' | ');
   const caught = expect.every(frag => failedNames.includes(frag));
   console.log((caught ? 'KILLED  ' : 'SURVIVED ') + name + '  (' + r.failed + ' test(s) failed)');
-  if (!caught) { survivors++; console.log('         failing: ' + (failedNames || 'none')); }
+  if (!caught)
+  {
+    survivors++;
+    console.log('         failing: ' + (failedNames || 'none'));
+  }
 });
 console.log('\n' + (MUTATIONS.length - survivors) + '/' + MUTATIONS.length + ' mutants killed');
 process.exit(survivors ? 1 : 0);
