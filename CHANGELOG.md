@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Injectable Gmail gateway** (`_GW`, `_dep_`, `_depGw_`) so the mutating routes can be tested against a fake without touching a mailbox. `_depGw_` throws if a caller supplies `deps` without a gateway, rather than silently falling through to live Gmail
 - **Static filter-conflict detection** — Gmail runs every matching filter, so overlapping criteria double-label. `_specConflicts_` catches that before anything is written and aborts an `&apply=1` run
 - **Hand-edit protection** — `rebuildfilters` never overwrites a filter someone edited by hand; `&force=1` overrides
-- Test suites `testFilterSpec` and `testMutatingPaths` in `tests.gs` (40 cases), using injected fixtures so they run without the private configuration file
+- Test suites `testFilterSpec` and `testMutatingPaths` in `tests.gs` (37 cases), using injected fixtures so they run without the private configuration file
 - `test/mutation_test.js` — mutation runner that breaks one guard at a time and asserts a test catches it
 - `?fn=selftest` route to run the whole suite over HTTP
 - `.claspignore` to keep `test/` out of the Apps Script push
@@ -36,6 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Toolkit configuration (sender rules, label taxonomy, thread IDs) is separated into a git-ignored `_private_data.gs`, so the logic is reviewable. A missing configuration file raises rather than degrading into an empty run
 - `reorg_toolkit.gs` converted to the house style: Allman braces, no single-line blocks, JSDoc on every function
 - Repeated literals replaced with named constants (`_PAGE_SIZE`, `_DRAIN_MAX_PASSES`, the runtime budgets). `MAX_RUNTIME` had been declared 10 times at three different values while `CONFIG.MAX_RUNTIME_MS` already existed
+
+### Removed
+- `?fn=linkedinnoise` and `linkedinNoiseBackfill_` - a one-off backfill that has had nothing to move since its single run. Delivery filters now file that mail on arrival
+- The gateway's `search()` op, which only that backfill used
 
 ### Fixed
 - **Silent backup failure** - a swallowed exception left the thread list empty, which reads the same as a label with no threads, and the run still printed `BACKUP COMPLETE`. Failed labels are now marked `READ FAILED` and the run reports itself incomplete
