@@ -74,7 +74,8 @@ function createBackup()
   let row = 2;
   let skippedCount = 0;
   const failedLabels = [];
-  let failedThreads = 0;
+  // Null-prototype map keyed on thread IDs; an ID leaves the map once written.
+  const failedThreadIds = Object.create(null);
   let timedOut = false;
 
   log('Found ' + labels.length + ' labels to process');
@@ -129,11 +130,12 @@ function createBackup()
         // Marked only once written, so a thread that fails here can still be
         // picked up from another of its labels.
         processedThreadIds[threadId] = true;
+        delete failedThreadIds[threadId];
       }
       catch (e)
       {
         logError('Error processing thread ' + threadId + ': ' + e.message);
-        failedThreads++;
+        failedThreadIds[threadId] = true;
       }
 
       // Flush periodically to prevent timeout and save progress
@@ -158,6 +160,7 @@ function createBackup()
   {
     problems.push(failedLabels.length + ' label(s) could not be read: ' + failedLabels.join(', '));
   }
+  const failedThreads = Object.keys(failedThreadIds).length;
   if (failedThreads > 0)
   {
     problems.push(failedThreads + ' thread(s) could not be written');

@@ -1171,6 +1171,8 @@ function testRetryHelpers(results)
     assert(isTransientError(new Error('Service error: Gmail')), 'Service error should retry');
     assert(isTransientError(new Error('We\'re sorry, a server error occurred. Please wait a bit and try again.')),
       'Server error should retry');
+    assert(!isTransientError(new Error('A server error occurred while reading from storage. Error code PERMISSION_DENIED.')),
+      'A permission error is permanent');
   }, results);
 
   runTest('isTransientError detects 503', function()

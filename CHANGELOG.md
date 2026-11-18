@@ -9,10 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **`getAllThreadsStrict`** (`utils.gs`) - reads every page of a label, retrying transient errors, and throws instead of returning a partial list
-- `isTransientError` treats Gmail's "Service error" and "server error occurred" messages as transient, so they are retried
 - **README "Label colors" section** - one hue per group, sub-labels match the parent, and the parent-label requirement for sidebar nesting
 - **Transient-error retry helper** (`withRetry`, `isTransientError` in `utils.gs`)
-  - Exponential backoff with jitter for 503/500/429/rate-limit/timeout errors
+  - Exponential backoff with jitter for 503/500/429/rate-limit/timeout errors and Gmail's "Service error" / "server error occurred" messages, except PERMISSION_DENIED
   - Time-budget aware: aborts a retry instead of pushing past `MAX_RUNTIME_MS`
   - `onRetry` callback hook for telemetry; isolates callback failures from request flow
   - New `CONFIG.MAX_RETRIES` (default 4) and `CONFIG.RETRY_BASE_DELAY_MS` (default 1000) knobs
@@ -21,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`reorg_toolkit.gs`** — Web App toolkit for upkeep and diagnostics, exposed through a `doGet` router. Mutating routes are dry-run by default, take `&apply=1`, and are idempotent and time-budgeted
 - **Injectable Gmail gateway** (`_GW`, `_dep_`, `_depGw_`) so `rebuildFilters_` can be tested against a fake without touching a mailbox. `_depGw_` throws if a caller supplies `deps` without a gateway, rather than silently falling through to live Gmail
 - **Static filter-conflict detection** — Gmail runs every matching filter, so overlapping criteria double-label. `_specConflicts_` catches that before anything is written and aborts an `&apply=1` run
-- **Hand-edit protection** — without `&force=1`, `rebuildfilters` never rewrites a filter whose labels or inbox setting differ from the spec, or that archives mail the spec keeps in the inbox, and never rewrites or deletes one that forwards mail or has extra criteria such as a subject. Repairing an orphan deletes and recreates it, keeping any other removed labels; if the recreate fails it is reported as FAILED
+- **Hand-edit protection** — without `&force=1`, `rebuildfilters` leaves alone a spec-sender filter that adds a label other than the spec's, has a different inbox setting, archives mail the spec keeps in the inbox, forwards mail, or has extra criteria such as a subject. A filter that adds no label and has none of those is treated as an orphan: deleted and recreated, keeping any other removed labels, and reported as FAILED if the recreate fails. A superseded filter is deleted unless it forwards mail or has extra criteria
 - Test suites `testFilterSpec` and `testMutatingPaths` in `tests.gs` (61 cases), using injected fixtures so they run without the private configuration file
 - `test/mutation_test.js` — mutation runner that breaks one guard at a time and asserts a test catches it
 - `?fn=selftest` route to run the whole suite over HTTP

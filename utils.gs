@@ -141,8 +141,9 @@ function getAllThreadsFromLabel(labelOrName)
  * cannot work that way: a short list looks exactly like a complete one. Each
  * page is retried on transient errors (see withRetry) before giving up.
  *
- * Callers pass no time budget: the worst-case backoff is a few seconds, well
- * inside the margin both backups keep below the 6-minute limit, and a retry
+ * Callers pass no time budget: with the default settings the worst-case wait
+ * is about 8.5 seconds per failed page (1 + 2 + 4 seconds plus jitter), inside
+ * the 60-80 second margin both backups keep below the 6-minute limit. A retry
  * abandoned for time would be misreported as a failed label.
  *
  * @param {GmailLabel} label - Label to read.
@@ -365,6 +366,12 @@ function withRetry(fn, description, opts)
 function isTransientError(e)
 {
   const msg = ((e && e.message) || '').toLowerCase();
+  // Apps Script words some permanent failures as "a server error occurred ...
+  // PERMISSION_DENIED"; retrying those only wastes the backoff.
+  if (msg.indexOf('permission_denied') !== -1)
+  {
+    return false;
+  }
   return msg.indexOf('503') !== -1 ||
          msg.indexOf('500') !== -1 ||
          msg.indexOf('429') !== -1 ||
