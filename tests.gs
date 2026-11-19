@@ -1800,84 +1800,110 @@ function testStatePersistence(results)
 {
   Logger.log('=== State Persistence Tests ===');
 
-  // Clean up before tests
+  // These functions read and write the real Script Properties, which hold a
+  // real migration's progress when runAllTests or selftest runs in Apps
+  // Script. Save those values first and put them back afterwards, even if a
+  // test fails, so running the suite never resets someone's migration.
   const props = PropertiesService.getScriptProperties();
-  props.deleteProperty(PROPERTY_KEYS.MIGRATION_STATE);
-  props.deleteProperty(PROPERTY_KEYS.COMPLETED_MIGRATIONS);
-  props.deleteProperty(PROPERTY_KEYS.STATISTICS);
-
-  runTest('loadMigrationState returns null when no state', function()
+  const keys = [PROPERTY_KEYS.MIGRATION_STATE, PROPERTY_KEYS.COMPLETED_MIGRATIONS, PROPERTY_KEYS.STATISTICS];
+  const saved = keys.map(function(k)
   {
-    const result = loadMigrationState();
-    assertNull(result, 'Should return null');
-  }, results);
-
-  runTest('saveMigrationState and loadMigrationState roundtrip', function()
+    return props.getProperty(k);
+  });
+  keys.forEach(function(k)
   {
-    const testState = {lastIndex: 5, timestamp: '2024-01-01'};
-    saveMigrationState(testState);
-    const result = loadMigrationState();
-    assertDeepEquals(result, testState, 'Should roundtrip correctly');
-  }, results);
+    props.deleteProperty(k);
+  });
 
-  runTest('clearMigrationState removes state', function()
+  try
   {
-    saveMigrationState({test: true});
-    clearMigrationState();
-    const result = loadMigrationState();
-    assertNull(result, 'Should be cleared');
-  }, results);
+    runTest('loadMigrationState returns null when no state', function()
+    {
+      const result = loadMigrationState();
+      assertNull(result, 'Should return null');
+    }, results);
 
-  runTest('getCompletedMigrations returns empty array when none', function()
-  {
-    const result = getCompletedMigrations();
-    assert(Array.isArray(result), 'Should be array');
-    assertEquals(result.length, 0, 'Should be empty');
-  }, results);
+    runTest('saveMigrationState and loadMigrationState roundtrip', function()
+    {
+      const testState = {lastIndex: 5, timestamp: '2024-01-01'};
+      saveMigrationState(testState);
+      const result = loadMigrationState();
+      assertDeepEquals(result, testState, 'Should roundtrip correctly');
+    }, results);
 
-  runTest('markMigrationCompleted adds to list', function()
-  {
-    markMigrationCompleted('OldLabel', 'NewLabel', 10);
-    const result = getCompletedMigrations();
-    assertEquals(result.length, 1, 'Should have one entry');
-    assertEquals(result[0].from, 'OldLabel', 'Should have correct from');
-    assertEquals(result[0].to, 'NewLabel', 'Should have correct to');
-    assertEquals(result[0].threads, 10, 'Should have correct threads');
-  }, results);
+    runTest('clearMigrationState removes state', function()
+    {
+      saveMigrationState({test: true});
+      clearMigrationState();
+      const result = loadMigrationState();
+      assertNull(result, 'Should be cleared');
+    }, results);
 
-  runTest('isMigrationCompleted returns true for completed', function()
-  {
-    const result = isMigrationCompleted('OldLabel');
-    assert(result === true, 'Should return true');
-  }, results);
+    runTest('getCompletedMigrations returns empty array when none', function()
+    {
+      const result = getCompletedMigrations();
+      assert(Array.isArray(result), 'Should be array');
+      assertEquals(result.length, 0, 'Should be empty');
+    }, results);
 
-  runTest('isMigrationCompleted returns false for not completed', function()
-  {
-    const result = isMigrationCompleted('NonExistent');
-    assert(result === false, 'Should return false');
-  }, results);
+    runTest('markMigrationCompleted adds to list', function()
+    {
+      markMigrationCompleted('OldLabel', 'NewLabel', 10);
+      const result = getCompletedMigrations();
+      assertEquals(result.length, 1, 'Should have one entry');
+      assertEquals(result[0].from, 'OldLabel', 'Should have correct from');
+      assertEquals(result[0].to, 'NewLabel', 'Should have correct to');
+      assertEquals(result[0].threads, 10, 'Should have correct threads');
+    }, results);
 
-  runTest('getStatistics returns object', function()
-  {
-    const result = getStatistics();
-    assert(typeof result === 'object', 'Should be object');
-  }, results);
+    runTest('isMigrationCompleted returns true for completed', function()
+    {
+      const result = isMigrationCompleted('OldLabel');
+      assert(result === true, 'Should return true');
+    }, results);
 
-  runTest('updateStatistics increments values', function()
-  {
-    updateStatistics(100, 5);
-    const result = getStatistics();
-    assert(result.totalThreadsProcessed >= 100, 'Should have threads');
-    assert(result.totalLabelsCreated >= 5, 'Should have labels');
-    assert(result.runCount >= 1, 'Should have run count');
-  }, results);
+    runTest('isMigrationCompleted returns false for not completed', function()
+    {
+      const result = isMigrationCompleted('NonExistent');
+      assert(result === false, 'Should return false');
+    }, results);
 
-  runTest('resetAllMigrationTracking clears everything', function()
+    runTest('getStatistics returns object', function()
+    {
+      const result = getStatistics();
+      assert(typeof result === 'object', 'Should be object');
+    }, results);
+
+    runTest('updateStatistics increments values', function()
+    {
+      updateStatistics(100, 5);
+      const result = getStatistics();
+      assert(result.totalThreadsProcessed >= 100, 'Should have threads');
+      assert(result.totalLabelsCreated >= 5, 'Should have labels');
+      assert(result.runCount >= 1, 'Should have run count');
+    }, results);
+
+    runTest('resetAllMigrationTracking clears everything', function()
+    {
+      resetAllMigrationTracking();
+      assertNull(loadMigrationState(), 'State should be null');
+      assertEquals(getCompletedMigrations().length, 0, 'Completed should be empty');
+    }, results);
+  }
+  finally
   {
-    resetAllMigrationTracking();
-    assertNull(loadMigrationState(), 'State should be null');
-    assertEquals(getCompletedMigrations().length, 0, 'Completed should be empty');
-  }, results);
+    keys.forEach(function(k, i)
+    {
+      if (saved[i] === null)
+      {
+        props.deleteProperty(k);
+      }
+      else
+      {
+        props.setProperty(k, saved[i]);
+      }
+    });
+  }
 }
 
 // ============================================================================
