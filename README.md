@@ -222,6 +222,7 @@ time replaces the trigger instead of adding another.
 | `runAllTests()` | Apps Script editor; results in the log |
 | `fn=selftest` (POST) | Deployed Web App; returns a pass/fail summary |
 | `node test/mutation_test.js` | A clone; no Apps Script needed |
+| `node test/lint.js` | A clone; checks every `.gs` file for undefined names and duplicate declarations |
 
 The first two run every suite in `tests.gs`. The third, which is what CI
 runs, runs three suites (filter rules, the toolkit's write paths, and the

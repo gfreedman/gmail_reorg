@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Static check in CI** (`test/lint.js`) - joins every `.gs` file into one script, as Apps Script sees them, and runs ESLint for undefined names, duplicate declarations and a few other defect rules, mapping each problem back to its file and line. It would have caught a route that called a function defined nowhere
 - **`getAllThreadsStrict`** (`utils.gs`) - reads every page of a label, retrying transient errors, and throws instead of returning a partial list
 - **README "Label colors" section** - one hue per group, sub-labels match the parent, and the parent-label requirement for sidebar nesting
 - **Transient-error retry helper** (`withRetry`, `isTransientError` in `utils.gs`)

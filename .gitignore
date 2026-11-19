@@ -79,3 +79,6 @@ temp/
 
 # Internal Claude Code prompt guides
 pages_helper.md
+
+# Temporary output of test/lint.js
+test/.lint-tmp/

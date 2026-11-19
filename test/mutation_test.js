@@ -202,23 +202,9 @@ function runSuite(sources)
 {
   const utils = fs.readFileSync(R + 'utils.gs', 'utf8');
   const tests = fs.readFileSync(R + 'tests.gs', 'utf8');
-  // _private_data.gs is git-ignored, so a clean clone will not have it. The
-  // production code deliberately does NOT tolerate its absence — a missing
-  // configuration must raise rather than degrade into an empty run — so the
-  // stubs live here, in the harness, instead of in the shipped code. Every
-  // suite exercised below injects its own fixtures, so the values are never
-  // read; they exist only to satisfy the eager argument evaluation in _dep_.
-  const PRIVATE_STUBS = [
-    'const _FILTER_SPEC = [];',
-    'const _FILTER_SUPERSEDED = [];',
-    'const _MISC_TO = [];',
-    'const _PASS_B_RULES = [];',
-    'const _PASS_C_LABEL_RULES = [];',
-    'const _PASS_D_LABEL_RULES = [];',
-    'const _PASS_F_RULES = [];',
-    'const _SPAM_TOOL_LABELS = {};',
-    'const _SPAM_SUSPECT_LABELS = {};'
-  ].join('\n');
+  // _private_data.gs is git-ignored, so a clean clone will not have it; see
+  // test/private_stubs.js for why the stubs live in the test tooling.
+  const PRIVATE_STUBS = require('./private_stubs.js');
 
   const privPath = R + '_private_data.gs';
   const priv = fs.existsSync(privPath) ? fs.readFileSync(privPath, 'utf8') : PRIVATE_STUBS;

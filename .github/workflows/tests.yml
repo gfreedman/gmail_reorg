@@ -25,3 +25,9 @@ jobs:
       # against a clean checkout.
       - name: Run tests
         run: node test/mutation_test.js
+
+      # Joins every .gs file into one script, as Apps Script sees them, and runs
+      # ESLint for undefined names and duplicate declarations, which otherwise
+      # fail only at run time on the path that reaches them.
+      - name: Static check
+        run: node test/lint.js
