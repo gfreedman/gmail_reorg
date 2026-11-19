@@ -1020,8 +1020,8 @@ function testSweepsAndBackups(results)
 
   runTest('_filingLabels_ drops the spam tool labels from the plan', function()
   {
-    assertDeepEquals(_filingLabels_(['Finance', 'SpamChecked', 'Reading'], TOOL), ['Finance', 'Reading'],
-      'Spam tool labels are not filing labels');
+    assertDeepEquals(_filingLabels_(['Finance', 'SpamChecked', 'constructor'], TOOL), ['Finance', 'constructor'],
+      'Spam tool labels are not filing labels; a prototype-named label is');
   }, results);
 
   runTest('_unplannedLabels_ lists only labels outside the plan and the spam tool', function()

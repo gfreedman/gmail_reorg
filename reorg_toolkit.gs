@@ -119,16 +119,25 @@ function _unplannedLabels_(userLabelNames, plan, toolLabels)
  *
  * Counts every filing label in _PLAN_LABELS. The reconciliation matters more
  * than the counts: it is what surfaces threads that belong to no plan label. A
- * label that cannot be read is reported as READ FAILED rather than undercounted.
+ * label that cannot be read is reported as READ FAILED, and the output warns
+ * which totals are then off. Stops counting labels at the time budget and says
+ * so, rather than being killed with no output.
  *
  * @param {Array<string>} out - Accumulator for output lines; returned to the caller as text.
  */
 function finalCounts_(out)
 {
+  const startTime = new Date().getTime();
   const planIds = Object.create(null);
   let readFailures = 0;
+  let timedOut = false;
   _filingLabels_(_PLAN_LABELS, _SPAM_TOOL_LABELS).forEach(function(name)
   {
+    if (timedOut || new Date().getTime() - startTime > _RUNTIME_MS_LARGE_OUTPUT)
+    {
+      timedOut = true;
+      return;
+    }
     const label = GmailApp.getUserLabelByName(name);
     if (!label)
     {
@@ -153,9 +162,10 @@ function finalCounts_(out)
     out.push(name + ': ' + threads.length);
   });
   out.push('---');
-  if (readFailures > 0)
+  if (timedOut)
   {
-    out.push('WARNING: ' + readFailures + ' label(s) could not be read; the totals below undercount.');
+    out.push('TIME BUDGET HIT — remaining labels were not counted; the totals below are incomplete.');
+    return;
   }
   const planUnique = Object.keys(planIds).length;
   out.push('Plan unique threads: ' + planUnique);
@@ -174,11 +184,16 @@ function finalCounts_(out)
     }
     catch (e)
     {
-      out.push('SpamChecked: READ FAILED — ' + ((e && e.message) || String(e)) +
-        '; the SpamChecked-only figure below is wrong');
+      readFailures++;
+      out.push('SpamChecked: READ FAILED — ' + ((e && e.message) || String(e)));
     }
   }
   out.push('SpamChecked threads: ' + Object.keys(scIds).length);
+  if (readFailures > 0)
+  {
+    out.push('WARNING: ' + readFailures + ' label(s) could not be read. Plan unique, SpamChecked and ' +
+      'SpamChecked-only undercount; Unaccounted overstates.');
+  }
 
   // SpamChecked-only (no plan label)
   let scOnly = 0;
@@ -229,7 +244,8 @@ function finalCounts_(out)
  */
 function diagnoseOrphans_(out)
 {
-  // 1. User labels outside the plan (and not the spam tool's) and their thread counts
+  // 1. User labels outside the plan (and not the spam tool's) and their thread counts.
+  // The helper works on names; the loop below needs the label objects to count them.
   const userLabels = GmailApp.getUserLabels();
   const unplanned = Object.create(null);
   _unplannedLabels_(userLabels.map(function(l)
@@ -246,7 +262,12 @@ function diagnoseOrphans_(out)
     if (unplanned[l.getName()])
     {
       const c = getThreadCountForLabel(l);
-      if (c > 0)
+      if (c < 0)
+      {
+        out.push('  ' + l.getName() + ': READ FAILED');
+        unmappedLabelCount++;
+      }
+      else if (c > 0)
       {
         out.push('  ' + l.getName() + ': ' + c);
         unmappedLabelCount++;
