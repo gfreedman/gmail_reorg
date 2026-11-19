@@ -587,9 +587,9 @@ function testMutatingPaths(results)
     }
   }, results);
 
-  runTest('doGet refuses an unauthorised request before routing', function()
+  runTest('doPost refuses an unauthorised request before routing', function()
   {
-    // Tests the wiring, not the guard: a correct _authorized_ that doGet never
+    // Tests the wiring, not the guard: a correct _authorized_ that doPost never
     // calls would leave every route wide open, and every other auth test would
     // still pass.
     const props = PropertiesService.getScriptProperties();
@@ -597,8 +597,65 @@ function testMutatingPaths(results)
     props.setProperty(_TOKEN_PROPERTY, 'a-real-token');
     try
     {
-      const body = doGet({parameter: {fn: 'counts', apply: '1'}}).getContent();
-      assertEquals(body, 'DENIED', 'doGet must deny before dispatching to any route');
+      const body = doPost({parameter: {fn: 'counts', apply: '1'}, queryString: ''}).getContent();
+      assertEquals(body, 'DENIED', 'doPost must deny before dispatching to any route');
+    }
+    finally
+    {
+      if (saved) { props.setProperty(_TOKEN_PROPERTY, saved); }
+      else { props.deleteProperty(_TOKEN_PROPERTY); }
+    }
+  }, results);
+
+  runTest('doGet never routes, even with a valid token', function()
+  {
+    const props = PropertiesService.getScriptProperties();
+    const saved = props.getProperty(_TOKEN_PROPERTY);
+    props.setProperty(_TOKEN_PROPERTY, 'a-real-token');
+    try
+    {
+      const body = doGet({parameter: {fn: 'nosuchroute', token: 'a-real-token'},
+        queryString: 'fn=nosuchroute&token=a-real-token'}).getContent();
+      assert(body.indexOf('DENIED') === 0 && body.indexOf('POST') !== -1,
+        'A GET must be refused and told to use POST');
+    }
+    finally
+    {
+      if (saved) { props.setProperty(_TOKEN_PROPERTY, saved); }
+      else { props.deleteProperty(_TOKEN_PROPERTY); }
+    }
+  }, results);
+
+  runTest('doPost refuses a token sent in the query string', function()
+  {
+    const props = PropertiesService.getScriptProperties();
+    const saved = props.getProperty(_TOKEN_PROPERTY);
+    props.setProperty(_TOKEN_PROPERTY, 'a-real-token');
+    try
+    {
+      // Apps Script merges query and body into e.parameter, so the token would
+      // otherwise be accepted from the URL.
+      const body = doPost({parameter: {fn: 'nosuchroute', token: 'a-real-token'},
+        queryString: 'fn=nosuchroute&token=a-real-token'}).getContent();
+      assertEquals(body, 'DENIED', 'A token in the URL must be refused');
+    }
+    finally
+    {
+      if (saved) { props.setProperty(_TOKEN_PROPERTY, saved); }
+      else { props.deleteProperty(_TOKEN_PROPERTY); }
+    }
+  }, results);
+
+  runTest('doPost routes a body token', function()
+  {
+    const props = PropertiesService.getScriptProperties();
+    const saved = props.getProperty(_TOKEN_PROPERTY);
+    props.setProperty(_TOKEN_PROPERTY, 'a-real-token');
+    try
+    {
+      const body = doPost({parameter: {fn: 'nosuchroute', token: 'a-real-token'},
+        queryString: ''}).getContent();
+      assertEquals(body, 'Unknown fn: nosuchroute', 'A valid body token reaches the router');
     }
     finally
     {

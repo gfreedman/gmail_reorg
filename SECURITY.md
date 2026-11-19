@@ -23,9 +23,9 @@ and can delete labels that hold no mail; that is all.
 
 Everything above, plus:
 
-- **Rewrite Gmail filters.** `?fn=rebuildfilters` creates and deletes delivery
-  filters to match the configured spec. Dry run by default; `&apply=1` to act.
-- **Serve mailbox data over HTTP.** `?fn=backup` returns every label and thread
+- **Rewrite Gmail filters.** `fn=rebuildfilters` creates and deletes delivery
+  filters to match the configured spec. Dry run by default; `apply=1` to act.
+- **Serve mailbox data over HTTP.** `fn=backup` returns every label and thread
   id as text; the diagnostics return sender domains and counts.
 
 Every mutating route is idempotent, re-runnable and dry-run by default.
@@ -36,11 +36,17 @@ The deployment is `ANYONE_ANONYMOUS` executing as the deploying user, which mean
 a request carries full Gmail authority. **An unguessable URL is not access
 control** — URLs leak through shell history, proxy logs and clipboards.
 
-Every route therefore requires a shared secret:
+Every route therefore requires a shared secret, sent in the POST body:
 
 ```
-https://script.google.com/macros/s/<deployment>/exec?fn=counts&token=<token>
+read -s TOKEN    # paste the token; nothing is echoed or saved to shell history
+curl -sL "https://script.google.com/macros/s/<deployment>/exec" \
+  --data-urlencode "fn=counts" --data-urlencode "token=$TOKEN"
 ```
+
+- Requests are POST only. A GET is always refused without reading anything,
+  and a token in the URL is refused even on POST, so the secret never sits in a
+  URL, browser history or proxy log.
 
 - The token lives in the Script Property `WEBAPP_TOKEN`, never in source.
 - `setWebAppToken()` in `admin.gs` mints one from `Utilities.getUuid()`

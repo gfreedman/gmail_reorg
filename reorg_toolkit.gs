@@ -1593,9 +1593,10 @@ function _constantTimeEquals_(a, b)
  *
  * The deployment is ANYONE_ANONYMOUS and executes as the deploying user, so a
  * request carries full Gmail authority: without this check anyone holding the
- * URL could rewrite every Gmail filter via rebuildfilters&apply=1 or dump every
- * thread id via backup. An unguessable URL is not an access control — URLs leak through shell
- * history, proxy logs and clipboards.
+ * URL could rewrite every Gmail filter via rebuildfilters with apply=1 or dump
+ * every thread id via backup. An unguessable URL is not an access control: URLs
+ * leak through shell history, proxy logs and clipboards. For the same reason the
+ * token travels in the POST body, never the URL (see doPost).
  *
  * Fails closed: if no token has been configured, every route is refused rather
  * than left open.
@@ -1624,20 +1625,64 @@ function _authorized_(e, out)
 }
 
 /**
- * Web App entry point: route a request to one maintenance function.
+ * Wrap text as a plain-text Web App response.
+ *
+ * @param {string} text - Response body.
+ * @return {TextOutput} Plain-text response.
+ */
+function _textResponse_(text)
+{
+  return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.TEXT);
+}
+
+/**
+ * Web App GET entry point: always refused.
+ *
+ * A token in a URL leaks into browser history, proxy logs and copied links, so
+ * the toolkit takes requests only as POST with the token in the body. GET never
+ * reads a token and never routes.
+ *
+ * @param {Object} e - Apps Script event object (unused).
+ * @return {TextOutput} A refusal.
+ */
+function doGet(e)
+{
+  return _textResponse_('DENIED — send requests as POST, with fn and token in the body');
+}
+
+/**
+ * Web App POST entry point.
+ *
+ * Refuses a token sent in the query string even on POST, so the URL never
+ * carries the secret. Otherwise routes like the old GET entry point did.
+ *
+ * @param {Object} e - Apps Script event object; e.parameter merges query and body.
+ * @return {TextOutput} Plain-text result of the requested route.
+ */
+function doPost(e)
+{
+  if (e && typeof e.queryString === 'string' && /(^|&)token=/.test(e.queryString))
+  {
+    return _textResponse_('DENIED');
+  }
+  return _route_(e);
+}
+
+/**
+ * Route an authorised request to one maintenance function.
  *
  * Every mutating route is a dry run unless apply=1. Errors are caught and returned as
  * text so a failure is visible in the response rather than only in the log.
  *
- * @param {Object} e - Apps Script event object carrying the query parameters.
+ * @param {Object} e - Apps Script event object carrying the request parameters.
  * @return {TextOutput} Plain-text result of the requested route.
  */
-function doGet(e)
+function _route_(e)
 {
   const out = [];
   if (!_authorized_(e, out))
   {
-    return ContentService.createTextOutput(out.join('\n')).setMimeType(ContentService.MimeType.TEXT);
+    return _textResponse_(out.join('\n'));
   }
   const fn = (e && e.parameter && e.parameter.fn) || '';
   const apply = !!(e && e.parameter && e.parameter.apply === '1');
@@ -1706,7 +1751,7 @@ function doGet(e)
     out.push('ERROR: ' + err.message);
     Logger.log(err.stack || String(err));
   }
-  return ContentService.createTextOutput(out.join('\n')).setMimeType(ContentService.MimeType.TEXT);
+  return _textResponse_(out.join('\n'));
 }
 
 // ---- Read-only: dump every Gmail filter, resolving label IDs to names ----

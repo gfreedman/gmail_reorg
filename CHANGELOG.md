@@ -17,11 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New `CONFIG.MAX_RETRIES` (default 4) and `CONFIG.RETRY_BASE_DELAY_MS` (default 1000) knobs
 - **Retry telemetry** surfaced in batch summary as `Transient errors retried: N`
 - Test suite `testRetryHelpers` in `tests.gs` covering classification, success/failure paths, budget enforcement, and telemetry
-- **`reorg_toolkit.gs`** — Web App toolkit for upkeep and diagnostics, exposed through a `doGet` router. Mutating routes are dry-run by default, take `&apply=1`, and are idempotent and time-budgeted
+- **`reorg_toolkit.gs`** — Web App toolkit for upkeep and diagnostics, exposed through a POST-only router. Mutating routes are dry-run by default, take `apply=1`, and are idempotent and time-budgeted
 - **Injectable Gmail gateway** (`_GW`, `_dep_`, `_depGw_`) so `rebuildFilters_` can be tested against a fake without touching a mailbox. `_depGw_` throws if a caller supplies `deps` without a gateway, rather than silently falling through to live Gmail
 - **Static filter-conflict detection** — Gmail runs every matching filter, so overlapping criteria double-label. `_specConflicts_` catches that before anything is written and aborts an `&apply=1` run
 - **Hand-edit protection** — without `&force=1`, `rebuildfilters` leaves alone a spec-sender filter that adds a label other than the spec's, has a different inbox setting, archives mail the spec keeps in the inbox, forwards mail, or has extra criteria such as a subject. A filter that adds no label and has none of those is treated as an orphan: deleted and recreated, keeping any other removed labels, and reported as FAILED if the recreate fails. A superseded filter is deleted unless it forwards mail or has extra criteria
-- Test suites `testFilterSpec`, `testMutatingPaths` and `testSweepsAndBackups` in `tests.gs` (85 cases), using injected fixtures so they run without the private configuration file. They cover the daily inbox sweep, `passF` and the library backup's counting and failure handling
+- Test suites `testFilterSpec`, `testMutatingPaths` and `testSweepsAndBackups` in `tests.gs` (88 cases), using injected fixtures so they run without the private configuration file. They cover the daily inbox sweep, `passF` and the library backup's counting and failure handling
 - `test/mutation_test.js` — mutation runner that breaks one guard at a time and asserts a test catches it
 - `?fn=selftest` route to run the whole suite over HTTP
 - `.claspignore` to keep `test/` out of the Apps Script push
@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI** - `.github/workflows/tests.yml` runs the unit and mutation suites on push and pull request
 
 ### Changed
+- **Web App requests are POST only, token in the body** - a GET is always refused, and a token in the query string is refused even on POST, so the secret never appears in a URL, browser history or proxy log. Callers change `curl -L "$URL?fn=X&token=T"` to `curl -L "$URL" --data-urlencode fn=X --data-urlencode token=T`; `--data-urlencode` makes it a POST, and adding `-X POST` breaks the redirect Apps Script answers with
 - `setWebAppToken()` writes the new token to the execution log, because the editor's Run button discards return values. The log keeps that copy until the token is rotated
 - Requests with no `fn` now return `Unknown fn` instead of running the `overlaps` report
 - `applyLabelToThreads` and `removeOldLabel` now accept `batchStats` and route through `withRetry`

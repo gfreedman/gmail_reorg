@@ -29,7 +29,7 @@ In the editor, click **+** next to **Files**, choose **Script**, and create thes
 
 `utils.gs` must be the first file listed in your project.
 
-`reorg_toolkit.gs` is a separate layer: a `doGet` router exposing
+`reorg_toolkit.gs` is a separate layer: a POST-only Web App router exposing
 maintenance and diagnostic routes over HTTP. Its configuration lives in `_private_data.gs`,
 which holds personal sender rules and label names and so is not in this repo.
 Without that file the toolkit raises a `ReferenceError` naming the missing
@@ -190,11 +190,17 @@ copy the token from the execution log. The editor's Run button discards return
 values, so the log is the only place it appears.
 
 ```
-https://script.google.com/macros/s/<deployment>/exec?fn=counts&token=<token>
+read -s TOKEN    # paste the token; nothing is echoed or saved to shell history
+curl -sL "https://script.google.com/macros/s/<deployment>/exec" \
+  --data-urlencode "fn=counts" --data-urlencode "token=$TOKEN"
 ```
 
-Every route needs `&token=`. Mutating routes stay dry runs until you add
-`&apply=1`. To rotate, run the same function again; the old token stops working
+Requests are POST only, with `fn` and `token` in the body. `--data-urlencode`
+already makes curl send a POST; don't add `-X POST`, which makes curl repeat
+the POST after Apps Script's redirect and get an error page. A GET is always
+refused, and so is a token in the URL, because URLs end up in browser history,
+proxy logs and copied links. Mutating routes stay dry runs until you add
+`apply=1`. To rotate, run the same function again; the old token stops working
 immediately.
 
 **4. Schedule the upkeep.** Run `installMaintenanceTrigger()` once. It installs a
@@ -214,7 +220,7 @@ time replaces the trigger instead of adding another.
 | How | Where |
 |-----|-------|
 | `runAllTests()` | Apps Script editor; results in the log |
-| `?fn=selftest` | Deployed Web App; returns a pass/fail summary |
+| `fn=selftest` (POST) | Deployed Web App; returns a pass/fail summary |
 | `node test/mutation_test.js` | A clone; no Apps Script needed |
 
 The first two run every suite in `tests.gs`. The third, which is what CI

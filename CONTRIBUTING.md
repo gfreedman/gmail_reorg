@@ -11,7 +11,7 @@
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/name`
 3. Test thoroughly:
-   - `runAllTests()` from the Apps Script editor, or `?fn=selftest` on a deployment
+   - `runAllTests()` from the Apps Script editor, or a POST with `fn=selftest` to a deployment
    - `node test/mutation_test.js` from a clone — this is what CI enforces
 4. If you touch a guard (an early return, a permission check, a dry-run branch),
    add a mutation for it. A `SURVIVED` line means nothing covers that guard,
