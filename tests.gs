@@ -1169,7 +1169,7 @@ function testSweepsAndBackups(results)
     assert(out.join('\n').indexOf('Captured (SpamChecked-only) this run: 1') !== -1, 'Should report it');
   }, results);
 
-  runTest('passF_ falls back to Misc when the rule label is missing', function()
+  runTest('passF_ falls back to Misc when its rule label is missing', function()
   {
     const misc = fakeDestLabel('Misc');
     passF_([], true, passFDeps([fakeListLabel('SpamChecked', [unfiled])], {Misc: misc}));
@@ -1187,12 +1187,36 @@ function testSweepsAndBackups(results)
     assert(out.join('\n').indexOf('ABORT') !== -1, 'Should say why');
   }, results);
 
+  runTest('passF_ treats a label named like a prototype member as filing', function()
+  {
+    const reading = fakeDestLabel('Reading');
+    const out = [];
+    passF_(out, true, passFDeps([
+      fakeListLabel('SpamChecked', [unfiled]),
+      fakeListLabel('constructor', [unfiled])], {Reading: reading}));
+    assertEquals(reading.added.length, 0, 'A thread under a label called constructor is filed');
+    assert(out.join('\n').indexOf('Skipped (suspected spam): 0') !== -1,
+      'It must count as filed, not as suspected spam');
+  }, results);
+
+  runTest('passF_ aborts without labelling when reading labels uses the whole budget', function()
+  {
+    const reading = fakeDestLabel('Reading');
+    const out = [];
+    // Reads: the start time, then after the first label read the clock has jumped.
+    passF_(out, true, passFDeps([fakeListLabel('SpamChecked', [unfiled]), fakeListLabel('Finance', [filed])],
+      {Reading: reading}, clockExpiringAfter(1)));
+    assertEquals(reading.added.length, 0, 'Nothing may be labelled');
+    assert(out.join('\n').indexOf('reading labels used the whole time budget') !== -1, 'Should say why');
+  }, results);
+
   runTest('passF_ stops at the time budget and says how many it did not reach', function()
   {
     const reading = fakeDestLabel('Reading');
     const second = fakeThread('u2', ['SpamChecked'], 'ann@news.example');
     const out = [];
-    // Reads: the start time, then before u1. Before u2 the clock jumps.
+    // Reads: the start time, then before u1 (SpamChecked itself is not read in
+    // the label phase, so no budget check runs there). Before u2 the clock jumps.
     passF_(out, true, passFDeps([fakeListLabel('SpamChecked', [unfiled, second])], {Reading: reading},
       clockExpiringAfter(2)));
     assertDeepEquals(reading.added, ['u1'], 'Should stop before the second thread');

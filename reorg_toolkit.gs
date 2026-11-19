@@ -24,8 +24,8 @@
 const _PAGE_SIZE = 500;
 
 // Apps Script kills an execution at 6 minutes. Every long-running route stops at
-// CONFIG.MAX_RUNTIME_MS and checkpoints so a re-run resumes, leaving the rest of
-// the buffer to flush output.
+// CONFIG.MAX_RUNTIME_MS, leaving the rest of the buffer to flush output; a re-run
+// then resumes from a saved position or rescans, skipping what is already done.
 const _RUNTIME_MS = (typeof CONFIG !== 'undefined' && CONFIG.MAX_RUNTIME_MS) || 300000;
 
 // Routes that accumulate a large response body (backup_, miscBreakdown_) stop
@@ -79,6 +79,21 @@ function _safeCall(fn, desc, out)
 }
 
 /**
+ * Test whether a set (a plain object of names) holds a key as its own property.
+ *
+ * Plain lookups would find Object.prototype members, so a label named
+ * constructor or toString would look like a member of every set.
+ *
+ * @param {Object} map - Set of names.
+ * @param {string} key - Name to look up.
+ * @return {boolean} True if key is an own property of map.
+ */
+function _hasOwn_(map, key)
+{
+  return Object.prototype.hasOwnProperty.call(map, key);
+}
+
+/**
  * List the filing labels in the plan: every plan label the spam tool does not own.
  *
  * @param {Array<string>} plan - The plan's label names.
@@ -89,7 +104,7 @@ function _filingLabels_(plan, toolLabels)
 {
   return plan.filter(function(name)
   {
-    return !Object.prototype.hasOwnProperty.call(toolLabels, name);
+    return !_hasOwn_(toolLabels, name);
   });
 }
 
@@ -110,7 +125,7 @@ function _unplannedLabels_(userLabelNames, plan, toolLabels)
   });
   return userLabelNames.filter(function(name)
   {
-    return !covered[name] && !Object.prototype.hasOwnProperty.call(toolLabels, name);
+    return !covered[name] && !_hasOwn_(toolLabels, name);
   });
 }
 
@@ -519,25 +534,16 @@ function _passF_dest(fromAddr, allRules)
  */
 function _classifyThread_(thread, toolLabels, suspectLabels)
 {
-  /**
-   * @param {Object} map - Label-name set.
-   * @param {string} key - Label name.
-   * @return {boolean} True if key is an own property of map.
-   */
-  const has = function(map, key)
-  {
-    return Object.prototype.hasOwnProperty.call(map, key);
-  };
   const labels = thread.getLabels();
   let isSuspect = false;
   for (let k = 0; k < labels.length; k++)
   {
     const n = labels[k].getName();
-    if (has(suspectLabels, n))
+    if (_hasOwn_(suspectLabels, n))
     {
       isSuspect = true;
     }
-    else if (!has(toolLabels, n))
+    else if (!_hasOwn_(toolLabels, n))
     {
       return 'filed';
     }
@@ -554,9 +560,14 @@ function _classifyThread_(thread, toolLabels, suspectLabels)
  * created one Gmail proxy object per label per thread, and Apps Script failed
  * partway with "Could not locate target object".
  *
- * Nothing is saved between runs: filed threads drop out of the set, so a rerun
- * picks up where the last one stopped. The time budget is checked before each
- * unfiled thread, since reading its sender is the slow step.
+ * Nothing is saved between runs: after an apply run, filed threads drop out of
+ * the set, so the next run picks up where it stopped. The time budget is
+ * checked after each label read, and before each unfiled thread, since reading
+ * its sender is the slow step.
+ *
+ * Labels are read one after another, not as a snapshot. A thread moved out of a
+ * label mid-read can be missed and get a second label; at a 03:00 run that
+ * window is negligible.
  *
  * @param {Array<string>} out - Accumulator for output lines; returned to the caller as text.
  * @param {boolean} apply - False for a dry run that only reports; true to execute.
@@ -581,16 +592,6 @@ function passF_(out, apply, deps)
   out.push((apply ? 'APPLY' : 'DRY-RUN') + ' Pass F — capture SpamChecked-only received mail');
   out.push('---');
 
-  /**
-   * @param {Object} map - Label-name set.
-   * @param {string} key - Label name.
-   * @return {boolean} True if key is an own property of map.
-   */
-  const has = function(map, key)
-  {
-    return Object.prototype.hasOwnProperty.call(map, key);
-  };
-
   // Null-prototype sets keyed on thread ids, so an id can never collide with
   // something on Object.prototype.
   const filedIds = Object.create(null);
@@ -605,7 +606,7 @@ function passF_(out, apply, deps)
     {
       sc = label;
     }
-    const target = has(suspectLabels, name) ? suspectIds : (has(toolLabels, name) ? null : filedIds);
+    const target = _hasOwn_(suspectLabels, name) ? suspectIds : (_hasOwn_(toolLabels, name) ? null : filedIds);
     if (!target)
     {
       continue;
@@ -626,6 +627,14 @@ function passF_(out, apply, deps)
     for (let k = 0; k < threads.length; k++)
     {
       target[threads[k].getId()] = true;
+    }
+    // Reading labels leaves no partial progress to keep, so stop with a clear
+    // message rather than run into the hard limit with no output at all.
+    if (now() - startTime > MAX_RUNTIME)
+    {
+      out.push('ABORT — reading labels used the whole time budget.');
+      out.push('Nothing was labelled. Re-run later.');
+      return;
     }
   }
   if (!sc)
@@ -658,6 +667,7 @@ function passF_(out, apply, deps)
   catch (e)
   {
     out.push('ABORT — could not read SpamChecked: ' + ((e && e.message) || String(e)));
+    out.push('Nothing was labelled. Re-run later.');
     return;
   }
 
