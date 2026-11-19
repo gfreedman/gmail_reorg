@@ -79,51 +79,121 @@ function _safeCall(fn, desc, out)
 }
 
 /**
+ * List the filing labels in the plan: every plan label the spam tool does not own.
+ *
+ * @param {Array<string>} plan - The plan's label names.
+ * @param {Object} toolLabels - Names of every label the spam tool owns.
+ * @return {Array<string>} Plan labels that count as filing.
+ */
+function _filingLabels_(plan, toolLabels)
+{
+  return plan.filter(function(name)
+  {
+    return !Object.prototype.hasOwnProperty.call(toolLabels, name);
+  });
+}
+
+/**
+ * List the user labels that are neither in the plan nor owned by the spam tool.
+ *
+ * @param {Array<string>} userLabelNames - Names of every user label in the account.
+ * @param {Array<string>} plan - The plan's label names.
+ * @param {Object} toolLabels - Names of every label the spam tool owns.
+ * @return {Array<string>} Labels outside the plan, in the order given.
+ */
+function _unplannedLabels_(userLabelNames, plan, toolLabels)
+{
+  const covered = Object.create(null);
+  plan.forEach(function(name)
+  {
+    covered[name] = true;
+  });
+  return userLabelNames.filter(function(name)
+  {
+    return !covered[name] && !Object.prototype.hasOwnProperty.call(toolLabels, name);
+  });
+}
+
+/**
  * Report authoritative per-label counts and reconcile them against the mailbox.
  *
- * The reconciliation matters more than the counts: it is what surfaces threads
- * that belong to no plan label.
+ * Counts every filing label in _PLAN_LABELS. The reconciliation matters more
+ * than the counts: it is what surfaces threads that belong to no plan label. A
+ * label that cannot be read is reported as READ FAILED, and the output warns
+ * which totals are then off. Stops counting labels at the time budget and says
+ * so, rather than being killed with no output.
  *
  * @param {Array<string>} out - Accumulator for output lines; returned to the caller as text.
  */
 function finalCounts_(out)
 {
-  const planIds = {};
-  Object.keys(_TREE).forEach(function(node)
+  const startTime = new Date().getTime();
+  const planIds = Object.create(null);
+  let readFailures = 0;
+  let timedOut = false;
+  _filingLabels_(_PLAN_LABELS, _SPAM_TOOL_LABELS).forEach(function(name)
   {
-    const ids = {};
-    // Count destination label (post-migration threads live here)
-    const dst = GmailApp.getUserLabelByName(node);
-    if (dst) getAllThreadsFromLabel(dst).forEach(function(t)
+    if (timedOut || new Date().getTime() - startTime > _RUNTIME_MS_LARGE_OUTPUT)
     {
-      ids[t.getId()] = true;
+      timedOut = true;
+      return;
+    }
+    const label = GmailApp.getUserLabelByName(name);
+    if (!label)
+    {
+      out.push(name + ': (label missing)');
+      return;
+    }
+    let threads;
+    try
+    {
+      threads = getAllThreadsStrict(label);
+    }
+    catch (e)
+    {
+      readFailures++;
+      out.push(name + ': READ FAILED — ' + ((e && e.message) || String(e)));
+      return;
+    }
+    threads.forEach(function(t)
+    {
       planIds[t.getId()] = true;
     });
-    // Plus source labels (pre-migration threads still live here)
-    _TREE[node].forEach(function(src)
-    {
-      const label = GmailApp.getUserLabelByName(src);
-      if (!label) return;
-      getAllThreadsFromLabel(label).forEach(function(t)
-      {
-        ids[t.getId()] = true;
-        planIds[t.getId()] = true;
-      });
-    });
-    out.push(node + ': ' + Object.keys(ids).length);
+    out.push(name + ': ' + threads.length);
   });
   out.push('---');
+  if (timedOut)
+  {
+    out.push('TIME BUDGET HIT — remaining labels were not counted; the totals below are incomplete.');
+    return;
+  }
   const planUnique = Object.keys(planIds).length;
   out.push('Plan unique threads: ' + planUnique);
 
   // SpamChecked
   const sc = GmailApp.getUserLabelByName('SpamChecked');
-  const scIds = {};
-  if (sc) getAllThreadsFromLabel(sc).forEach(function(t)
+  const scIds = Object.create(null);
+  if (sc)
   {
-    scIds[t.getId()] = true;
-  });
+    try
+    {
+      getAllThreadsStrict(sc).forEach(function(t)
+      {
+        scIds[t.getId()] = true;
+      });
+    }
+    catch (e)
+    {
+      readFailures++;
+      out.push('SpamChecked: READ FAILED — ' + ((e && e.message) || String(e)));
+    }
+  }
   out.push('SpamChecked threads: ' + Object.keys(scIds).length);
+  if (readFailures > 0)
+  {
+    out.push('WARNING: ' + readFailures + ' label(s) could not be read. Plan unique, SpamChecked and ' +
+      'SpamChecked-only undercount; Unaccounted overstates.');
+  }
 
   // SpamChecked-only (no plan label)
   let scOnly = 0;
@@ -174,31 +244,30 @@ function finalCounts_(out)
  */
 function diagnoseOrphans_(out)
 {
-  // Plan source labels = considered "covered"
-  const planSrcs = {};
-  Object.keys(_TREE).forEach(function(node)
-  {
-    _TREE[node].forEach(function(src)
-    {
-      planSrcs[src] = true;
-    });
-  });
-  // Also covered: spam tool labels
-  ['SpamChecked', 'SuspectedSpam', 'SpamMissed'].forEach(function(n)
-  {
-    planSrcs[n] = true;
-  });
-
-  // 1. User labels NOT in plan and their thread counts
+  // 1. User labels outside the plan (and not the spam tool's) and their thread counts.
+  // The helper works on names; the loop below needs the label objects to count them.
   const userLabels = GmailApp.getUserLabels();
+  const unplanned = Object.create(null);
+  _unplannedLabels_(userLabels.map(function(l)
+  {
+    return l.getName();
+  }), _PLAN_LABELS, _SPAM_TOOL_LABELS).forEach(function(name)
+  {
+    unplanned[name] = true;
+  });
   out.push('=== USER LABELS NOT IN PLAN ===');
   let unmappedLabelCount = 0;
   userLabels.forEach(function(l)
   {
-    if (!planSrcs[l.getName()])
+    if (unplanned[l.getName()])
     {
       const c = getThreadCountForLabel(l);
-      if (c > 0)
+      if (c < 0)
+      {
+        out.push('  ' + l.getName() + ': READ FAILED');
+        unmappedLabelCount++;
+      }
+      else if (c > 0)
       {
         out.push('  ' + l.getName() + ': ' + c);
         unmappedLabelCount++;
