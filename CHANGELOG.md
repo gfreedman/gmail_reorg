@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI** - `.github/workflows/tests.yml` runs the unit and mutation suites on push and pull request
 
 ### Changed
+- **Toolkit split by job** - `reorg_toolkit.gs` (about 1,800 lines) is now five files: shared settings and helpers stay in `reorg_toolkit.gs`; `toolkit_webapp.gs` (entry points, token check), `toolkit_filters.gs`, `toolkit_filing.gs` and `toolkit_reports.gs`. Every function moved unchanged
 - **Web App requests are POST only, token in the body** - a GET is always refused, and a token in the query string is refused even on POST, so the secret never appears in a URL, browser history or proxy log. Callers change `curl -L "$URL?fn=X&token=T"` to `curl -L "$URL" --data-urlencode fn=X --data-urlencode token=T`; `--data-urlencode` makes it a POST, and adding `-X POST` breaks the redirect Apps Script answers with
 - `setWebAppToken()` writes the new token to the execution log, because the editor's Run button discards return values. The log keeps that copy until the token is rotated
 - Requests with no `fn` now return `Unknown fn` instead of running the `overlaps` report

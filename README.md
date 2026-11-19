@@ -22,16 +22,21 @@ In the editor, click **+** next to **Files**, choose **Script**, and create thes
 | `analysis.gs` | Label analysis |
 | `reorganization.gs` | Migration execution |
 | `examples.gs` | Ready-to-run example scripts (optional) |
-| `tests.gs` | Test suite (optional; three of its suites test the toolkit, so they need `reorg_toolkit.gs` and `admin.gs`) |
-| `reorg_toolkit.gs` | Web App toolkit for upkeep and diagnostics (optional) |
-| `admin.gs` | Toolkit setup functions you run by hand (optional, needs `reorg_toolkit.gs`) |
+| `tests.gs` | Test suite (optional; three of its suites test the toolkit, so they need the toolkit files) |
+| `reorg_toolkit.gs` | Toolkit: shared settings and helpers (optional, with the four `toolkit_*.gs` files) |
+| `toolkit_webapp.gs` | Toolkit: Web App entry points and the token check |
+| `toolkit_filters.gs` | Toolkit: rebuilds and lists Gmail delivery filters |
+| `toolkit_filing.gs` | Toolkit: the daily inbox sweep and `passF` |
+| `toolkit_reports.gs` | Toolkit: read-only reports and the restore backup |
+| `admin.gs` | Toolkit setup functions you run by hand (optional, needs the toolkit files) |
 | `appsscript.json` | Project manifest: turns on the Gmail advanced service the toolkit uses, and the Web App settings. Paste it over the project's own manifest (Project Settings > Show "appsscript.json") |
 
 `utils.gs` must be the first file listed in your project.
 
-`reorg_toolkit.gs` is a separate layer: a POST-only Web App router exposing
-maintenance and diagnostic routes over HTTP. Its configuration lives in `_private_data.gs`,
-which holds personal sender rules and label names and so is not in this repo.
+The toolkit (`reorg_toolkit.gs` and the four `toolkit_*.gs` files) is a separate
+layer: a POST-only Web App router exposing maintenance and diagnostic routes
+over HTTP. Its configuration lives in `_private_data.gs`, which holds personal
+sender rules and label names and so is not in this repo.
 Without that file the toolkit raises a `ReferenceError` naming the missing
 constant, so an absent configuration stops the run instead of quietly doing
 nothing. The rest of the library works without it.
@@ -164,7 +169,7 @@ showProgress();
 
 ## Toolkit setup (optional)
 
-Skip this unless you are deploying `reorg_toolkit.gs` as a Web App. The library
+Skip this unless you are deploying the toolkit as a Web App. The library
 does not need any of it.
 
 The toolkit runs behind a shared secret and fails closed: until you mint a token,

@@ -1,5 +1,5 @@
 /**
- * Functions you run by hand, kept out of reorg_toolkit.gs so they are easy to
+ * Functions you run by hand, kept out of the toolkit files so they are easy to
  * find in the Apps Script editor's Run menu.
  *
  * Apps Script evaluates every .gs file into one global scope, so these reach the

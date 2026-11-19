@@ -6,9 +6,10 @@
 what the [front page](https://gfreedman.github.io/gmail_reorg/) documents. It runs
 from the Apps Script editor, changes labels only, and never deletes a message.
 
-**The toolkit** (`reorg_toolkit.gs`, `admin.gs`) is a maintenance layer deployed
-as a Web App and driven over HTTP. It can relabel mail and rewrite your Gmail
-filters. Read it before running it against your own account.
+**The toolkit** (`reorg_toolkit.gs`, the `toolkit_*.gs` files and `admin.gs`) is
+a maintenance layer deployed as a Web App and driven over HTTP. It can relabel
+mail and rewrite your Gmail filters. Read it before running it against your own
+account.
 
 ## What the library can and cannot do
 

@@ -126,7 +126,7 @@ function runTest(testName, testFn, results)
 // ============================================================================
 
 /**
- * Test suite for the delivery-filter helpers in reorg_toolkit.gs.
+ * Test suite for the delivery-filter helpers in toolkit_filters.gs.
  *
  * These use injected fixture specs rather than the real _FILTER_SPEC, so the
  * suite runs without _private_data.gs being present.

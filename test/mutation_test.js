@@ -254,12 +254,13 @@ function runSuite(sources)
 }
 
 // Mutations may target any source file, not just the toolkit: the maintenance
-// trigger lives in admin.gs, and anchoring only in reorg_toolkit.gs silently
+// trigger lives in admin.gs, and anchoring only in one file silently
 // reported those mutants as "anchor not found".
 // Load order matters here though not in Apps Script: the harness concatenates
 // every file into one function body, so CONFIG (reorganization.gs) must be
 // declared before reorg_toolkit.gs reads it at load time.
-const MUTABLE = ['reorganization.gs', 'reorg_toolkit.gs', 'admin.gs', 'backup.gs'];
+const MUTABLE = ['reorganization.gs', 'reorg_toolkit.gs', 'toolkit_webapp.gs', 'toolkit_filters.gs',
+  'toolkit_filing.gs', 'toolkit_reports.gs', 'admin.gs', 'backup.gs'];
 const clean = {};
 MUTABLE.forEach(function(f)
 {
