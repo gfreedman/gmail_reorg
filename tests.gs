@@ -1016,6 +1016,21 @@ function testSweepsAndBackups(results)
   const SUSPECT = {SuspectedSpam: 1};
   const RULES = [['news.example', 'Reading']];
 
+  // --- report helpers ---
+
+  runTest('_filingLabels_ drops the spam tool labels from the plan', function()
+  {
+    assertDeepEquals(_filingLabels_(['Finance', 'SpamChecked', 'Reading'], TOOL), ['Finance', 'Reading'],
+      'Spam tool labels are not filing labels');
+  }, results);
+
+  runTest('_unplannedLabels_ lists only labels outside the plan and the spam tool', function()
+  {
+    assertDeepEquals(_unplannedLabels_(['Finance', 'SpamChecked', 'Old Stuff', 'constructor'],
+      ['Finance'], TOOL), ['Old Stuff', 'constructor'],
+      'Plan and spam-tool labels are covered; a prototype-named label is not');
+  }, results);
+
   // --- _classifyThread_ ---
 
   runTest('_classifyThread_ calls a thread with a non-tool label filed', function()
