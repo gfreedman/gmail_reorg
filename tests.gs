@@ -1110,50 +1110,93 @@ function testSweepsAndBackups(results)
 
   // --- passF_ ---
 
-  runTest('passF_ files a SpamChecked-only thread and clears its offset at the end', function()
+  /**
+   * Build the deps for a Pass F run over the given labels.
+   *
+   * @param {Array<Object>} labels - Fake user labels (fakeListLabel), including SpamChecked
+   * @param {Object} dests - Fake destination labels by name (fakeDestLabel)
+   * @param {Function} [now] - Fake clock
+   * @return {Object} deps for passF_
+   */
+  function passFDeps(labels, dests, now)
+  {
+    const deps = {gw: fakeGateway({userLabels: labels, labelsByName: dests}),
+      rules: RULES, toolLabels: TOOL, suspectLabels: SUSPECT};
+    if (now)
+    {
+      deps.now = now;
+    }
+    return deps;
+  }
+
+  /**
+   * Build a fake clock that stands still for a number of reads, then jumps an
+   * hour ahead, past any time budget.
+   *
+   * @param {number} stillReads - Reads that return the start time
+   * @return {Function} Clock returning milliseconds
+   */
+  function clockExpiringAfter(stillReads)
+  {
+    let reads = 0;
+    return function()
+    {
+      reads++;
+      return reads <= stillReads ? 0 : 3600000;
+    };
+  }
+
+  const unfiled = fakeThread('u1', ['SpamChecked'], 'ann@news.example');
+  const filed = fakeThread('f1', ['SpamChecked', 'Finance'], 'ann@news.example');
+  const suspect = fakeThread('s1', ['SpamChecked', 'SuspectedSpam'], 'ann@news.example');
+
+  runTest('passF_ files only the SpamChecked threads that no filing label holds', function()
   {
     const reading = fakeDestLabel('Reading');
-    const sc = fakeListLabel('SpamChecked', [fakeThread('t1', ['SpamChecked'], 'ann@news.example')]);
-    const gw = fakeGateway({labelsByName: {SpamChecked: sc, Reading: reading}});
-    const props = fakePropStore();
-    props.setProperty('passF_offset', '0');
-    passF_([], true, {gw: gw, props: props, rules: RULES, toolLabels: TOOL, suspectLabels: SUSPECT});
-    assertDeepEquals(reading.added, ['t1'], 'Should file the thread');
-    assertNull(props.getProperty('passF_offset'), 'Reaching the end clears the resume point');
+    passF_([], true, passFDeps([
+      fakeListLabel('SpamChecked', [unfiled, filed, suspect]),
+      fakeListLabel('Finance', [filed]),
+      fakeListLabel('SuspectedSpam', [suspect])], {Reading: reading}));
+    assertDeepEquals(reading.added, ['u1'], 'Filed and suspected-spam threads must be left alone');
   }, results);
 
-  runTest('passF_ dry run labels nothing and saves no offset', function()
+  runTest('passF_ dry run labels nothing', function()
   {
     const reading = fakeDestLabel('Reading');
-    const sc = fakeListLabel('SpamChecked', [fakeThread('t1', ['SpamChecked'], 'ann@news.example')]);
-    const gw = fakeGateway({labelsByName: {SpamChecked: sc, Reading: reading}});
-    const props = fakePropStore();
-    passF_([], false, {gw: gw, props: props, rules: RULES, toolLabels: TOOL, suspectLabels: SUSPECT});
+    const out = [];
+    passF_(out, false, passFDeps([fakeListLabel('SpamChecked', [unfiled])], {Reading: reading}));
     assertEquals(reading.added.length, 0, 'Dry run must not label');
-    assertEquals(Object.keys(props.data).length, 0, 'Dry run must not save state');
+    assert(out.join('\n').indexOf('Captured (SpamChecked-only) this run: 1') !== -1, 'Should report it');
   }, results);
 
   runTest('passF_ falls back to Misc when the rule label is missing', function()
   {
     const misc = fakeDestLabel('Misc');
-    const sc = fakeListLabel('SpamChecked', [fakeThread('t1', ['SpamChecked'], 'ann@news.example')]);
-    const gw = fakeGateway({labelsByName: {SpamChecked: sc, Misc: misc}});
-    passF_([], true, {gw: gw, props: fakePropStore(), rules: RULES, toolLabels: TOOL, suspectLabels: SUSPECT});
-    assertDeepEquals(misc.added, ['t1'], 'An unfiled thread must still land in a bucket');
+    passF_([], true, passFDeps([fakeListLabel('SpamChecked', [unfiled])], {Misc: misc}));
+    assertDeepEquals(misc.added, ['u1'], 'An unfiled thread must still land in a bucket');
   }, results);
 
-  runTest('passF_ refuses to use real Script Properties when props is not injected', function()
+  runTest('passF_ aborts without labelling when a filing label cannot be read', function()
   {
-    let message = '';
-    try
-    {
-      passF_([], false, {gw: fakeGateway({})});
-    }
-    catch (e)
-    {
-      message = String(e && e.message);
-    }
-    assert(message.indexOf('refusing to use real Script Properties') !== -1, 'Must be refused by the guard');
+    const reading = fakeDestLabel('Reading');
+    const out = [];
+    passF_(out, true, passFDeps([
+      fakeListLabel('SpamChecked', [unfiled, filed]),
+      fakeListLabel('Finance', [filed], true)], {Reading: reading}));
+    assertEquals(reading.added.length, 0, 'An unreadable label could hide filed threads, so label nothing');
+    assert(out.join('\n').indexOf('ABORT') !== -1, 'Should say why');
+  }, results);
+
+  runTest('passF_ stops at the time budget and says how many it did not reach', function()
+  {
+    const reading = fakeDestLabel('Reading');
+    const second = fakeThread('u2', ['SpamChecked'], 'ann@news.example');
+    const out = [];
+    // Reads: the start time, then before u1. Before u2 the clock jumps.
+    passF_(out, true, passFDeps([fakeListLabel('SpamChecked', [unfiled, second])], {Reading: reading},
+      clockExpiringAfter(2)));
+    assertDeepEquals(reading.added, ['u1'], 'Should stop before the second thread');
+    assert(out.join('\n').indexOf('1 unfiled thread(s) not reached') !== -1, 'Should say what is left');
   }, results);
 
   // --- library backup ---

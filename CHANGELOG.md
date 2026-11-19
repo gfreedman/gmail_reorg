@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Injectable Gmail gateway** (`_GW`, `_dep_`, `_depGw_`) so `rebuildFilters_` can be tested against a fake without touching a mailbox. `_depGw_` throws if a caller supplies `deps` without a gateway, rather than silently falling through to live Gmail
 - **Static filter-conflict detection** — Gmail runs every matching filter, so overlapping criteria double-label. `_specConflicts_` catches that before anything is written and aborts an `&apply=1` run
 - **Hand-edit protection** — without `&force=1`, `rebuildfilters` leaves alone a spec-sender filter that adds a label other than the spec's, has a different inbox setting, archives mail the spec keeps in the inbox, forwards mail, or has extra criteria such as a subject. A filter that adds no label and has none of those is treated as an orphan: deleted and recreated, keeping any other removed labels, and reported as FAILED if the recreate fails. A superseded filter is deleted unless it forwards mail or has extra criteria
-- Test suites `testFilterSpec`, `testMutatingPaths` and `testSweepsAndBackups` in `tests.gs` (80 cases), using injected fixtures so they run without the private configuration file. They cover the daily inbox sweep, `passF` and the library backup's counting and failure handling
+- Test suites `testFilterSpec`, `testMutatingPaths` and `testSweepsAndBackups` in `tests.gs` (81 cases), using injected fixtures so they run without the private configuration file. They cover the daily inbox sweep, `passF` and the library backup's counting and failure handling
 - `test/mutation_test.js` — mutation runner that breaks one guard at a time and asserts a test catches it
 - `?fn=selftest` route to run the whole suite over HTTP
 - `.claspignore` to keep `test/` out of the Apps Script push
@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Repeated literals replaced with named constants (`_PAGE_SIZE`, the runtime budgets). `MAX_RUNTIME` had been declared 10 times at three different values while `CONFIG.MAX_RUNTIME_MS` already existed
 
 ### Removed
+- `?fn=passFreset` and `passF`'s saved resume offset - `passF` now works from thread-id sets and needs no position: a rerun skips whatever is already filed
 - `?fn=linkedinnoise` and `linkedinNoiseBackfill_` - a one-off backfill that has had nothing to move since its single run. Delivery filters now file that mail on arrival
 - The gateway's `search()` op, which only that backfill used
 - **Finished one-off toolkit routes** - `passA`-`passE`, `passFtrash`, `cleanup`, `recover`, `overlaps`, `flattenReading`, `productbc`, `miscextract`, `consolidate`, `cleanupparents`, `driftmerge` and `inboxtriage`, with the helpers only they used. Each was a migration that has already run. The toolkit no longer trashes mail
@@ -48,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The gateway's `getLabel()` and `deleteLabel()` ops and the `fakeLabel` test helper, which only `driftmerge` used
 
 ### Fixed
+- **`passF` failed on a large SpamChecked backlog** - it asked every SpamChecked thread for its labels, creating one Gmail proxy object per label per thread, and on a few thousand threads Apps Script failed with "Could not locate target object". It now reads each label's thread ids once and examines only SpamChecked threads that no filing label holds. It stops rather than guesses if a label cannot be read, and checks its time budget before each unfiled thread
 - **Reports measured against the pre-reorg labels** - `?fn=counts` summed each plan label with its long-gone migration sources, and `?fn=diagnose` listed every current label as "not in plan" because it compared against those source names. Both now use the plan label list and take the spam tool's labels from configuration instead of a fixed list of three. `counts` reports a label it cannot read as `READ FAILED`, warns which totals are then off, and stops at its time budget with a note instead of being killed; `diagnose` reports a label whose count cannot be read instead of dropping it
 - **Backup stopped without a summary** - a failed periodic save in `createBackup()` aborted the whole run with no report. The save now happens as part of writing a row, so a failure counts that row as failed and the backup is reported incomplete
 - **Spam-label lookup fooled by prototype names** - the inbox sweep and `passF` looked label names up on plain objects, so a label named `constructor` or `toString` was treated as a spam-tool label. Both now share `_classifyThread_`, which uses own-property lookups

@@ -312,9 +312,8 @@ To remove a color completely, use "Remove color" in the Gmail label menu.
 ## Design notes
 
 **Dry runs by default.** Mutating operations report what they would do and need
-an explicit flag to act. The exceptions are the scheduled maintenance, which
-only adds labels, and the toolkit's `passFreset`, which only clears a saved
-position. Migrations are idempotent and checkpointed, so hitting the 6-minute
+an explicit flag to act. The exception is the scheduled maintenance, which only
+adds labels. Migrations are idempotent and checkpointed, so hitting the 6-minute
 limit mid-migration is not a problem: run it again.
 
 **Filing belongs in Gmail, not a mail client.** An earlier version of this setup
