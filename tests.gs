@@ -1118,6 +1118,15 @@ function testSweepsAndBackups(results)
     assertEquals(Object.keys(props.data).length, 0, 'Dry run must not save state');
   }, results);
 
+  runTest('passF_ falls back to Misc when the rule label is missing', function()
+  {
+    const misc = fakeDestLabel('Misc');
+    const sc = fakeListLabel('SpamChecked', [fakeThread('t1', ['SpamChecked'], 'ann@news.example')]);
+    const gw = fakeGateway({labelsByName: {SpamChecked: sc, Misc: misc}});
+    passF_([], true, {gw: gw, props: fakePropStore(), rules: RULES, toolLabels: TOOL, suspectLabels: SUSPECT});
+    assertDeepEquals(misc.added, ['t1'], 'An unfiled thread must still land in a bucket');
+  }, results);
+
   runTest('passF_ refuses to use real Script Properties when props is not injected', function()
   {
     let message = '';
@@ -1162,6 +1171,17 @@ function testSweepsAndBackups(results)
       });
     assertEquals(result.written, 1, 'The second label writes it');
     assertEquals(result.failedThreads, 0, 'A thread written in the end is not a failure');
+  }, results);
+
+  runTest('collectBackupRows stops at the time limit and says so', function()
+  {
+    // A start time an hour ago is past any budget.
+    const result = collectBackupRows([fakeListLabel('A', [fakeThread('a1', ['A'])])],
+      new Date().getTime() - 3600000, function() {});
+    assert(result.timedOut, 'Should stop before reading');
+    assertEquals(result.written, 0, 'Nothing should be written after the limit');
+    assert(describeBackupProblems(result).join('; ').indexOf('stopped at the time limit') !== -1,
+      'Should report the stop');
   }, results);
 
   runTest('collectBackupRows reports an unreadable label and an unwritable thread', function()

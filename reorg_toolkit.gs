@@ -450,6 +450,11 @@ function _passF_dest(fromAddr, allRules)
  */
 function _classifyThread_(thread, toolLabels, suspectLabels)
 {
+  /**
+   * @param {Object} map - Label-name set.
+   * @param {string} key - Label name.
+   * @return {boolean} True if key is an own property of map.
+   */
   const has = function(map, key)
   {
     return Object.prototype.hasOwnProperty.call(map, key);
@@ -927,29 +932,6 @@ function backup_(out, deps)
 // reduce it to a no-op that reports success. Tests declare their own stubs (see
 // test/mutation_test.js) rather than making this file tolerate the gap.
 /**
- * Resolve the Script Properties store, refusing to default it once deps is supplied.
- *
- * Same reasoning as _depGw_: a test that forgets props must fail loudly rather
- * than read or overwrite a real resume checkpoint.
- *
- * @param {Object} [deps] - Injected dependencies, or null in production.
- * @return {Object} Properties store to use.
- * @throws {Error} If deps is supplied without a props key.
- */
-function _depProps_(deps)
-{
-  if (!deps)
-  {
-    return PropertiesService.getScriptProperties();
-  }
-  if (!deps.props)
-  {
-    throw new Error('deps supplied without props — refusing to use real Script Properties');
-  }
-  return deps.props;
-}
-
-/**
  * Resolve one injected dependency, falling back to production configuration.
  *
  * @param {Object} [deps] - Injected dependencies, or null in production.
@@ -985,6 +967,29 @@ function _depGw_(deps)
     throw new Error('deps supplied without a gw gateway — refusing to fall back to live Gmail');
   }
   return deps.gw;
+}
+
+/**
+ * Resolve the Script Properties store, refusing to default it once deps is supplied.
+ *
+ * Same reasoning as _depGw_: a test that forgets props must fail loudly rather
+ * than read or overwrite a real resume checkpoint.
+ *
+ * @param {Object} [deps] - Injected dependencies, or null in production.
+ * @return {Object} Properties store to use.
+ * @throws {Error} If deps is supplied without a props key.
+ */
+function _depProps_(deps)
+{
+  if (!deps)
+  {
+    return PropertiesService.getScriptProperties();
+  }
+  if (!deps.props)
+  {
+    throw new Error('deps supplied without props — refusing to use real Script Properties');
+  }
+  return deps.props;
 }
 
 /**
