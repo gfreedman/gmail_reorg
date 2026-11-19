@@ -9,8 +9,8 @@ backups/
 
 # Reorg toolkit configuration — personal sender data (friend/family addresses,
 # per-sender filing rules, label taxonomy). Kept local only, like the
-# ORGANIZATION_PLAN. The logic that consumes it lives in reorg_toolkit.gs, which
-# IS committed.
+# ORGANIZATION_PLAN. The logic that consumes it lives in the toolkit files, which
+# ARE committed.
 _private_data.gs
 
 # Data exports

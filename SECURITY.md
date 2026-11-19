@@ -37,6 +37,12 @@ The deployment is `ANYONE_ANONYMOUS` executing as the deploying user, which mean
 a request carries full Gmail authority. **An unguessable URL is not access
 control** — URLs leak through shell history, proxy logs and clipboards.
 
+**The token is the only access control.** Restricting the Web App to its owner
+would be stronger, because Google would then require a signed-in session on
+every request. It was not chosen because the toolkit is driven by `curl`, which
+would then need an OAuth access token on each call. If you only use the
+toolkit from a browser while signed in, prefer owner-only access.
+
 Every route therefore requires a shared secret, sent in the POST body:
 
 ```
@@ -46,8 +52,12 @@ curl -sL "https://script.google.com/macros/s/<deployment>/exec" \
 ```
 
 - Requests are POST only. A GET is always refused without reading anything,
-  and a token in the URL is refused even on POST, so the secret never sits in a
-  URL, browser history or proxy log.
+  and any POST with a query string is refused, so a token in a URL never works.
+  Refusing cannot unsend a URL that was already sent, so never put the token in
+  one.
+- Residual exposure: Google receives the request body; while curl runs, other
+  users on the same machine can see its command line, including `$TOKEN`; and
+  the Apps Script execution log keeps the token written by `setWebAppToken()`.
 
 - The token lives in the Script Property `WEBAPP_TOKEN`, never in source.
 - `setWebAppToken()` in `admin.gs` mints one from `Utilities.getUuid()`

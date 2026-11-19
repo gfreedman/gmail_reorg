@@ -119,7 +119,7 @@ function _specConflicts_(spec)
 //            reorg deleted its target, so there is no user intent to keep
 // 'manual' — anything else, including a filter that forwards mail, has extra
 //            criteria such as a subject, or archives mail the spec keeps in the
-//            inbox; not overwritten without &force=1
+//            inbox; not overwritten without force=1
 /**
  * Decide whether an existing filter is correct, repairable, or hand-edited.
  *
@@ -303,7 +303,7 @@ function rebuildFilters_(out, apply, force, deps)
         out.push('MANUAL  ' + desc);
         out.push('        hand-edited: add=[' + adds.join(',') + '] remove=[' + rem.join(',') + ']' +
           (_hasUnmanagedSettings_(prior) ? ' plus forwarding or extra criteria' : '') +
-          ' — left alone, re-run with &force=1 to overwrite');
+          ' — left alone, re-run with force=1 to overwrite');
         skipped++;
         continue;
       }
@@ -398,7 +398,7 @@ function rebuildFilters_(out, apply, force, deps)
     if (_hasUnmanagedSettings_(stale) && !force)
     {
       out.push('MANUAL  superseded ' + label + ' has forwarding or extra criteria — left alone,' +
-        ' re-run with &force=1 to delete');
+        ' re-run with force=1 to delete');
       skipped++;
       continue;
     }

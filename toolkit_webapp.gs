@@ -38,18 +38,21 @@ function _constantTimeEquals_(a, b)
  * URL could rewrite every Gmail filter via rebuildfilters with apply=1 or dump
  * every thread id via backup. An unguessable URL is not an access control: URLs
  * leak through shell history, proxy logs and clipboards. For the same reason the
- * token travels in the POST body, never the URL (see doPost).
+ * token travels in the POST body; a request with anything in its URL is refused
+ * (see doPost).
  *
  * Fails closed: if no token has been configured, every route is refused rather
  * than left open.
  *
  * @param {Object} e - Apps Script event object.
  * @param {Array<string>} out - Accumulator for the response.
+ * @param {Object} [deps] - Test injection point: {props}, so tests never touch
+ *     the real token. Production omits it.
  * @return {boolean} True if the request may proceed.
  */
-function _authorized_(e, out)
+function _authorized_(e, out, deps)
 {
-  const expected = PropertiesService.getScriptProperties().getProperty(_TOKEN_PROPERTY);
+  const expected = _depProps_(deps).getProperty(_TOKEN_PROPERTY);
   if (!expected)
   {
     out.push('DENIED — no token configured. Run setWebAppToken() from the Apps Script editor.');
@@ -95,19 +98,23 @@ function doGet(e)
 /**
  * Web App POST entry point.
  *
- * Refuses a token sent in the query string even on POST, so the URL never
- * carries the secret. Otherwise routes like the old GET entry point did.
+ * Refuses any request with a query string. Apps Script merges query and body
+ * into e.parameter, so a token in the URL would otherwise be accepted, and
+ * matching only "token=" would miss an encoded name such as "%74oken=". No
+ * legitimate call puts anything in the URL, so the whole query is refused.
+ * Refusing cannot unsend a URL, but it means a token in a URL never works.
  *
  * @param {Object} e - Apps Script event object; e.parameter merges query and body.
+ * @param {Object} [deps] - Test injection point: {props}. Apps Script passes only e.
  * @return {TextOutput} Plain-text result of the requested route.
  */
-function doPost(e)
+function doPost(e, deps)
 {
-  if (e && typeof e.queryString === 'string' && /(^|&)token=/.test(e.queryString))
+  if (e && e.queryString)
   {
     return _textResponse_('DENIED');
   }
-  return _route_(e);
+  return _route_(e, deps);
 }
 
 /**
@@ -117,12 +124,13 @@ function doPost(e)
  * text so a failure is visible in the response rather than only in the log.
  *
  * @param {Object} e - Apps Script event object carrying the request parameters.
+ * @param {Object} [deps] - Passed to _authorized_; production omits it.
  * @return {TextOutput} Plain-text result of the requested route.
  */
-function _route_(e)
+function _route_(e, deps)
 {
   const out = [];
-  if (!_authorized_(e, out))
+  if (!_authorized_(e, out, deps))
   {
     return _textResponse_(out.join('\n'));
   }

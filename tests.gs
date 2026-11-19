@@ -495,22 +495,13 @@ function testMutatingPaths(results)
 
   runTest('setWebAppToken produces a long, unique, high-entropy token', function()
   {
-    const props = PropertiesService.getScriptProperties();
-    const saved = props.getProperty(_TOKEN_PROPERTY);
-    try
-    {
-      const first = setWebAppToken();
-      const second = setWebAppToken();
-      assert(first.length >= 32, 'Token must be long enough to resist guessing');
-      assert(first !== second, 'Each call must produce a fresh token');
-      assertEquals(props.getProperty(_TOKEN_PROPERTY), second, 'The latest token must be stored');
-      assert(/^[0-9a-f]+$/.test(first), 'Should be hex from the UUID source');
-    }
-    finally
-    {
-      if (saved) { props.setProperty(_TOKEN_PROPERTY, saved); }
-      else { props.deleteProperty(_TOKEN_PROPERTY); }
-    }
+    const props = fakePropStore();
+    const first = setWebAppToken({props: props});
+    const second = setWebAppToken({props: props});
+    assert(first.length >= 32, 'Token must be long enough to resist guessing');
+    assert(first !== second, 'Each call must produce a fresh token');
+    assertEquals(props.getProperty(_TOKEN_PROPERTY), second, 'The latest token must be stored');
+    assert(/^[0-9a-f]+$/.test(first), 'Should be hex from the UUID source');
   }, results);
 
   runTest('_constantTimeEquals_ matches identical strings', function()
@@ -532,59 +523,32 @@ function testMutatingPaths(results)
 
   runTest('_authorized_ fails closed when no token is configured', function()
   {
-    const props = PropertiesService.getScriptProperties();
-    const saved = props.getProperty(_TOKEN_PROPERTY);
-    props.deleteProperty(_TOKEN_PROPERTY);
-    try
-    {
-      const out = [];
-      assert(!_authorized_(eventWithToken('anything'), out),
-        'With no token configured every route must be refused, not opened');
-      assert(out.join('').indexOf('DENIED') !== -1, 'Should say DENIED');
-    }
-    finally
-    {
-      if (saved) { props.setProperty(_TOKEN_PROPERTY, saved); }
-    }
+    const props = fakePropStore();
+    const out = [];
+    assert(!_authorized_(eventWithToken('anything'), out, {props: props}),
+      'With no token configured every route must be refused, not opened');
+    assert(out.join('').indexOf('DENIED') !== -1, 'Should say DENIED');
   }, results);
 
   runTest('_authorized_ rejects a missing or wrong token', function()
   {
-    const props = PropertiesService.getScriptProperties();
-    const saved = props.getProperty(_TOKEN_PROPERTY);
+    const props = fakePropStore();
     props.setProperty(_TOKEN_PROPERTY, 'correct-horse-battery-staple');
-    try
-    {
-      assert(!_authorized_(eventWithToken(), []), 'No token must be refused');
-      assert(!_authorized_(eventWithToken(''), []), 'Empty token must be refused');
-      assert(!_authorized_(eventWithToken('wrong'), []), 'Wrong token must be refused');
-      assert(_authorized_(eventWithToken('correct-horse-battery-staple'), []),
-        'The configured token must be accepted');
-    }
-    finally
-    {
-      if (saved) { props.setProperty(_TOKEN_PROPERTY, saved); }
-      else { props.deleteProperty(_TOKEN_PROPERTY); }
-    }
+    assert(!_authorized_(eventWithToken(), [], {props: props}), 'No token must be refused');
+    assert(!_authorized_(eventWithToken(''), [], {props: props}), 'Empty token must be refused');
+    assert(!_authorized_(eventWithToken('wrong'), [], {props: props}), 'Wrong token must be refused');
+    assert(_authorized_(eventWithToken('correct-horse-battery-staple'), [], {props: props}),
+      'The configured token must be accepted');
   }, results);
 
   runTest('_authorized_ denial leaks nothing about the request', function()
   {
-    const props = PropertiesService.getScriptProperties();
-    const saved = props.getProperty(_TOKEN_PROPERTY);
+    const props = fakePropStore();
     props.setProperty(_TOKEN_PROPERTY, 'a-real-token');
-    try
-    {
-      const out = [];
-      _authorized_({parameter: {token: 'wrong', fn: 'rebuildfilters', apply: '1'}}, out);
-      const text = out.join('\n');
-      assertEquals(text, 'DENIED', 'Denial must not echo the route, the token, or a reason');
-    }
-    finally
-    {
-      if (saved) { props.setProperty(_TOKEN_PROPERTY, saved); }
-      else { props.deleteProperty(_TOKEN_PROPERTY); }
-    }
+    const out = [];
+    _authorized_({parameter: {token: 'wrong', fn: 'rebuildfilters', apply: '1'}}, out, {props: props});
+    const text = out.join('\n');
+    assertEquals(text, 'DENIED', 'Denial must not echo the route, the token, or a reason');
   }, results);
 
   runTest('doPost refuses an unauthorised request before routing', function()
@@ -592,76 +556,49 @@ function testMutatingPaths(results)
     // Tests the wiring, not the guard: a correct _authorized_ that doPost never
     // calls would leave every route wide open, and every other auth test would
     // still pass.
-    const props = PropertiesService.getScriptProperties();
-    const saved = props.getProperty(_TOKEN_PROPERTY);
+    const props = fakePropStore();
     props.setProperty(_TOKEN_PROPERTY, 'a-real-token');
-    try
-    {
-      const body = doPost({parameter: {fn: 'counts', apply: '1'}, queryString: ''}).getContent();
-      assertEquals(body, 'DENIED', 'doPost must deny before dispatching to any route');
-    }
-    finally
-    {
-      if (saved) { props.setProperty(_TOKEN_PROPERTY, saved); }
-      else { props.deleteProperty(_TOKEN_PROPERTY); }
-    }
+    const body = doPost({parameter: {fn: 'counts', apply: '1'}, queryString: ''}, {props: props}).getContent();
+    assertEquals(body, 'DENIED', 'doPost must deny before dispatching to any route');
   }, results);
 
   runTest('doGet never routes, even with a valid token', function()
   {
-    const props = PropertiesService.getScriptProperties();
-    const saved = props.getProperty(_TOKEN_PROPERTY);
-    props.setProperty(_TOKEN_PROPERTY, 'a-real-token');
-    try
-    {
-      const body = doGet({parameter: {fn: 'nosuchroute', token: 'a-real-token'},
-        queryString: 'fn=nosuchroute&token=a-real-token'}).getContent();
-      assert(body.indexOf('DENIED') === 0 && body.indexOf('POST') !== -1,
-        'A GET must be refused and told to use POST');
-    }
-    finally
-    {
-      if (saved) { props.setProperty(_TOKEN_PROPERTY, saved); }
-      else { props.deleteProperty(_TOKEN_PROPERTY); }
-    }
+    // doGet reads no token and no store, so no fake store is needed.
+    const body = doGet({parameter: {fn: 'nosuchroute', token: 'a-real-token'},
+      queryString: 'fn=nosuchroute&token=a-real-token'}).getContent();
+    assert(body.indexOf('DENIED') === 0 && body.indexOf('POST') !== -1,
+      'A GET must be refused and told to use POST');
   }, results);
 
   runTest('doPost refuses a token sent in the query string', function()
   {
-    const props = PropertiesService.getScriptProperties();
-    const saved = props.getProperty(_TOKEN_PROPERTY);
+    const props = fakePropStore();
     props.setProperty(_TOKEN_PROPERTY, 'a-real-token');
-    try
-    {
-      // Apps Script merges query and body into e.parameter, so the token would
-      // otherwise be accepted from the URL.
-      const body = doPost({parameter: {fn: 'nosuchroute', token: 'a-real-token'},
-        queryString: 'fn=nosuchroute&token=a-real-token'}).getContent();
-      assertEquals(body, 'DENIED', 'A token in the URL must be refused');
-    }
-    finally
-    {
-      if (saved) { props.setProperty(_TOKEN_PROPERTY, saved); }
-      else { props.deleteProperty(_TOKEN_PROPERTY); }
-    }
+    // Apps Script merges query and body into e.parameter, so the token would
+    // otherwise be accepted from the URL.
+    const body = doPost({parameter: {fn: 'nosuchroute', token: 'a-real-token'},
+      queryString: 'fn=nosuchroute&token=a-real-token'}, {props: props}).getContent();
+    assertEquals(body, 'DENIED', 'A token in the URL must be refused');
+  }, results);
+
+  runTest('doPost refuses a URL token hidden behind an encoded name', function()
+  {
+    const props = fakePropStore();
+    props.setProperty(_TOKEN_PROPERTY, 'a-real-token');
+    // Apps Script may decode %74oken to token, so this must not get through.
+    const body = doPost({parameter: {fn: 'nosuchroute', token: 'a-real-token'},
+      queryString: 'fn=nosuchroute&%74oken=a-real-token'}, {props: props}).getContent();
+    assertEquals(body, 'DENIED', 'Any query string is refused');
   }, results);
 
   runTest('doPost routes a body token', function()
   {
-    const props = PropertiesService.getScriptProperties();
-    const saved = props.getProperty(_TOKEN_PROPERTY);
+    const props = fakePropStore();
     props.setProperty(_TOKEN_PROPERTY, 'a-real-token');
-    try
-    {
-      const body = doPost({parameter: {fn: 'nosuchroute', token: 'a-real-token'},
-        queryString: ''}).getContent();
-      assertEquals(body, 'Unknown fn: nosuchroute', 'A valid body token reaches the router');
-    }
-    finally
-    {
-      if (saved) { props.setProperty(_TOKEN_PROPERTY, saved); }
-      else { props.deleteProperty(_TOKEN_PROPERTY); }
-    }
+    const body = doPost({parameter: {fn: 'nosuchroute', token: 'a-real-token'},
+      queryString: ''}, {props: props}).getContent();
+    assertEquals(body, 'Unknown fn: nosuchroute', 'A valid body token reaches the router');
   }, results);
 
   // --- dependency injection guards ---

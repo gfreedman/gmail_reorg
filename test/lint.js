@@ -88,14 +88,23 @@ const run = childProcess.spawnSync('npx', ['--yes', ESLINT, '--no-warn-ignored',
   {cwd: ROOT, encoding: 'utf8'});
 fs.rmSync(tmpDir, {recursive: true, force: true});
 
-let report;
-try
+let report = null;
+if (!run.error)
 {
-  report = JSON.parse(run.stdout);
+  try
+  {
+    report = JSON.parse(run.stdout);
+  }
+  catch (e)
+  {
+    report = null;
+  }
 }
-catch (e)
+if (!Array.isArray(report))
 {
-  console.error('ESLint did not produce a report:\n' + run.stdout + run.stderr);
+  // Fail loudly: a check that could not run must never look like a pass.
+  console.error('ESLint did not produce a report (exit ' + run.status + ').');
+  console.error(run.error ? String(run.error) : (run.stdout || '') + (run.stderr || ''));
   process.exit(2);
 }
 
