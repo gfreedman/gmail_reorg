@@ -388,17 +388,25 @@ function migrateLabels(batchStats)
  * Migrate a single label from old to new.
  * Applies new label to all threads, then removes old label.
  *
+ * Reads the source label strictly. If any page of its threads cannot be read,
+ * nothing is moved and success is false, so the migration is not marked
+ * complete and the next run tries it again. A lenient read would move only the
+ * threads it got, report success, and leave the rest behind for good.
+ *
  * @param {string} fromLabelName - Source label name
  * @param {string} toLabelName - Destination label name
  * @param {Object} batchStats - Running stats object for this batch
+ * @param {Object} [deps] - Test injection point: {gmail}, a stand-in for
+ *     GmailApp. Production omits it.
  * @return {Object} {success: boolean, threadCount: number, error: string|null}
  */
-function migrateSingleLabel(fromLabelName, toLabelName, batchStats)
+function migrateSingleLabel(fromLabelName, toLabelName, batchStats, deps)
 {
   const result = {success: false, threadCount: 0, error: null};
+  const gmail = deps && deps.gmail ? deps.gmail : GmailApp;
 
   // Get source label
-  const fromLabel = GmailApp.getUserLabelByName(fromLabelName);
+  const fromLabel = gmail.getUserLabelByName(fromLabelName);
   if (!fromLabel)
   {
     if (CONFIG.VERBOSE)
@@ -408,8 +416,20 @@ function migrateSingleLabel(fromLabelName, toLabelName, batchStats)
     return result;
   }
 
-  // Get threads from source label
-  const threads = getAllThreadsFromLabel(fromLabel);
+  // Get every thread from the source label, or none at all
+  let threads;
+  try
+  {
+    threads = getAllThreadsStrict(fromLabel, buildRetryOpts(batchStats));
+  }
+  catch (e)
+  {
+    logError('Could not read every thread of "' + fromLabelName + '"; nothing moved, will retry next run: ' +
+      e.message);
+    result.error = e.message;
+    batchStats.errors.push('Read: ' + fromLabelName + ' - ' + e.message);
+    return result;
+  }
 
   if (threads.length === 0)
   {
@@ -428,10 +448,10 @@ function migrateSingleLabel(fromLabelName, toLabelName, batchStats)
     try
     {
       // Get or create destination label
-      let toLabel = GmailApp.getUserLabelByName(toLabelName);
+      let toLabel = gmail.getUserLabelByName(toLabelName);
       if (!toLabel)
       {
-        toLabel = GmailApp.createLabel(toLabelName);
+        toLabel = gmail.createLabel(toLabelName);
         log('    Created destination label: ' + toLabelName);
         batchStats.labelsCreated++;
       }

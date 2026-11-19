@@ -1,5 +1,5 @@
 /**
- * Mutation tests for the safety guards in reorg_toolkit.gs, admin.gs and backup.gs.
+ * Mutation tests for the safety guards in the toolkit, backup and migration code.
  *
  * A passing test suite only means something if it fails when the code breaks.
  * This deliberately breaks one guard at a time and asserts that the expected
@@ -29,10 +29,22 @@ const MUTATIONS = [
    "if (existing[i].getHandlerFunction() === _MAINTENANCE_HANDLER)",
    "if (true)",
    ['leaves unrelated triggers alone']],
-  ['auth check removed from doGet',
-   "if (!_authorized_(e, out))",
+  ['auth check removed from the router',
+   "if (!_authorized_(e, out, deps))",
    "if (false)",
-   ['doGet refuses an unauthorised request before routing']],
+   ['doPost refuses an unauthorised request before routing']],
+  ['GET routes again',
+   "return _textResponse_('DENIED — send requests as POST, with fn and token in the body');",
+   "return _route_(e);",
+   ['doGet never routes']],
+  ['query-string token accepted',
+   "if (e && e.queryString)",
+   "if (e && typeof e.queryString === 'string' && /(^|&)token=/.test(e.queryString))",
+   ['doPost refuses a URL token hidden behind an encoded name']],
+  ['URL token accepted at all',
+   "if (e && e.queryString)",
+   "if (false)",
+   ['doPost refuses a token sent in the query string']],
   ['auth fails OPEN when unconfigured',
    "if (!expected) { out.push('DENIED — no token configured. Run setWebAppToken() from the Apps Script editor.'); return false; }",
    "if (!expected) { return true; }",
@@ -151,6 +163,10 @@ const MUTATIONS = [
    "return !covered[name] && !_hasOwn_(toolLabels, name);",
    "return !_hasOwn_(toolLabels, name);",
    ['_unplannedLabels_ lists only labels outside the plan']],
+  ['migration reads leniently again',
+   "threads = getAllThreadsStrict(fromLabel, buildRetryOpts(batchStats));",
+   "threads = getAllThreadsFromLabel(fromLabel);",
+   ['migrateSingleLabel moves nothing and fails when a page cannot be read']],
   ['backup counts a recovered thread as failed',
    "delete failedThreadIds[threadId];",
    "",
@@ -181,8 +197,8 @@ function anchor(literal)
  * Apps Script evaluates every .gs file into a single global scope; concatenating
  * the sources into one Function body reproduces that.
  *
- * @param {{toolkit: string, admin: string, backup: string}} sources - Source
- *     text of reorg_toolkit.gs, admin.gs and backup.gs, possibly mutated
+ * @param {Object<string, string>} sources - Source text of each mutable file
+ *     (see MUTABLE), possibly mutated
  * @return {{passed: number, failed: number, errors: Array<Object>}} Suite
  *     results; failed is -1 if the sources did not load
  */
@@ -190,23 +206,9 @@ function runSuite(sources)
 {
   const utils = fs.readFileSync(R + 'utils.gs', 'utf8');
   const tests = fs.readFileSync(R + 'tests.gs', 'utf8');
-  // _private_data.gs is git-ignored, so a clean clone will not have it. The
-  // production code deliberately does NOT tolerate its absence — a missing
-  // configuration must raise rather than degrade into an empty run — so the
-  // stubs live here, in the harness, instead of in the shipped code. Every
-  // suite exercised below injects its own fixtures, so the values are never
-  // read; they exist only to satisfy the eager argument evaluation in _dep_.
-  const PRIVATE_STUBS = [
-    'const _FILTER_SPEC = [];',
-    'const _FILTER_SUPERSEDED = [];',
-    'const _MISC_TO = [];',
-    'const _PASS_B_RULES = [];',
-    'const _PASS_C_LABEL_RULES = [];',
-    'const _PASS_D_LABEL_RULES = [];',
-    'const _PASS_F_RULES = [];',
-    'const _SPAM_TOOL_LABELS = {};',
-    'const _SPAM_SUSPECT_LABELS = {};'
-  ].join('\n');
+  // _private_data.gs is git-ignored, so a clean clone will not have it; see
+  // test/private_stubs.js for why the stubs live in the test tooling.
+  const PRIVATE_STUBS = require('./private_stubs.js');
 
   const privPath = R + '_private_data.gs';
   const priv = fs.existsSync(privPath) ? fs.readFileSync(privPath, 'utf8') : PRIVATE_STUBS;
@@ -235,8 +237,10 @@ function runSuite(sources)
       }
     };
   `;
-  const body = prelude + priv + '\n' + utils + '\n' + sources.backup + '\n' + sources.toolkit + '\n' +
-    sources.admin + '\n' + tests + `
+  const body = prelude + priv + '\n' + utils + '\n' + MUTABLE.map(function(f)
+  {
+    return sources[f];
+  }).join('\n') + '\n' + tests + `
     var results = {passed: 0, failed: 0, errors: []};
     testFilterSpec(results);
     testMutatingPaths(results);
@@ -254,9 +258,13 @@ function runSuite(sources)
 }
 
 // Mutations may target any source file, not just the toolkit: the maintenance
-// trigger lives in admin.gs, and anchoring only in reorg_toolkit.gs silently
+// trigger lives in admin.gs, and anchoring only in one file silently
 // reported those mutants as "anchor not found".
-const MUTABLE = ['reorg_toolkit.gs', 'admin.gs', 'backup.gs'];
+// Load order matters here though not in Apps Script: the harness concatenates
+// every file into one function body, so CONFIG (reorganization.gs) must be
+// declared before reorg_toolkit.gs reads it at load time.
+const MUTABLE = ['reorganization.gs', 'reorg_toolkit.gs', 'toolkit_webapp.gs', 'toolkit_filters.gs',
+  'toolkit_filing.gs', 'toolkit_reports.gs', 'admin.gs', 'backup.gs'];
 const clean = {};
 MUTABLE.forEach(function(f)
 {
@@ -268,15 +276,16 @@ MUTABLE.forEach(function(f)
  *
  * @param {Object<string, string>|null} overrides - Mutated source text keyed
  *     by file name, or null for the unmodified sources
- * @return {{toolkit: string, admin: string, backup: string}} Sources to pass to runSuite
+ * @return {Object<string, string>} Source text by file name, to pass to runSuite
  */
 function sourcesFrom(overrides)
 {
-  return {
-    toolkit: (overrides && overrides['reorg_toolkit.gs']) || clean['reorg_toolkit.gs'],
-    admin: (overrides && overrides['admin.gs']) || clean['admin.gs'],
-    backup: (overrides && overrides['backup.gs']) || clean['backup.gs']
-  };
+  const sources = {};
+  MUTABLE.forEach(function(f)
+  {
+    sources[f] = (overrides && overrides[f]) || clean[f];
+  });
+  return sources;
 }
 
 const base = runSuite(sourcesFrom(null));

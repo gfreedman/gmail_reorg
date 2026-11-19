@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Static check in CI** (`test/lint.js`) - joins every `.gs` file into one script, as Apps Script sees them, and runs ESLint for undefined names, duplicate declarations and a few other defect rules, mapping each problem back to its file and line
 - **`getAllThreadsStrict`** (`utils.gs`) - reads every page of a label, retrying transient errors, and throws instead of returning a partial list
 - **README "Label colors" section** - one hue per group, sub-labels match the parent, and the parent-label requirement for sidebar nesting
 - **Transient-error retry helper** (`withRetry`, `isTransientError` in `utils.gs`)
@@ -17,13 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New `CONFIG.MAX_RETRIES` (default 4) and `CONFIG.RETRY_BASE_DELAY_MS` (default 1000) knobs
 - **Retry telemetry** surfaced in batch summary as `Transient errors retried: N`
 - Test suite `testRetryHelpers` in `tests.gs` covering classification, success/failure paths, budget enforcement, and telemetry
-- **`reorg_toolkit.gs`** — Web App toolkit for upkeep and diagnostics, exposed through a `doGet` router. Mutating routes are dry-run by default, take `&apply=1`, and are idempotent and time-budgeted
+- **`reorg_toolkit.gs`** — Web App toolkit for upkeep and diagnostics, exposed through a POST-only router. Mutating routes are dry-run by default, take `apply=1`, and are idempotent and time-budgeted
 - **Injectable Gmail gateway** (`_GW`, `_dep_`, `_depGw_`) so `rebuildFilters_` can be tested against a fake without touching a mailbox. `_depGw_` throws if a caller supplies `deps` without a gateway, rather than silently falling through to live Gmail
-- **Static filter-conflict detection** — Gmail runs every matching filter, so overlapping criteria double-label. `_specConflicts_` catches that before anything is written and aborts an `&apply=1` run
-- **Hand-edit protection** — without `&force=1`, `rebuildfilters` leaves alone a spec-sender filter that adds a label other than the spec's, has a different inbox setting, archives mail the spec keeps in the inbox, forwards mail, or has extra criteria such as a subject. A filter that adds no label and has none of those is treated as an orphan: deleted and recreated, keeping any other removed labels, and reported as FAILED if the recreate fails. A superseded filter is deleted unless it forwards mail or has extra criteria
-- Test suites `testFilterSpec`, `testMutatingPaths` and `testSweepsAndBackups` in `tests.gs` (83 cases), using injected fixtures so they run without the private configuration file. They cover the daily inbox sweep, `passF` and the library backup's counting and failure handling
+- **Static filter-conflict detection** — Gmail runs every matching filter, so overlapping criteria double-label. `_specConflicts_` catches that before anything is written and aborts an `apply=1` run
+- **Hand-edit protection** — without `force=1`, `rebuildfilters` leaves alone a spec-sender filter that adds a label other than the spec's, has a different inbox setting, archives mail the spec keeps in the inbox, forwards mail, or has extra criteria such as a subject. A filter that adds no label and has none of those is treated as an orphan: deleted and recreated, keeping any other removed labels, and reported as FAILED if the recreate fails. A superseded filter is deleted unless it forwards mail or has extra criteria
+- Test suites `testFilterSpec`, `testMutatingPaths` and `testSweepsAndBackups` in `tests.gs` (88 cases), using injected fixtures so they run without the private configuration file. They cover the daily inbox sweep, `passF` and the library backup's counting and failure handling
 - `test/mutation_test.js` — mutation runner that breaks one guard at a time and asserts a test catches it
-- `?fn=selftest` route to run the whole suite over HTTP
+- `fn=selftest` route to run the whole suite over HTTP (POST)
 - `.claspignore` to keep `test/` out of the Apps Script push
 - **Web App authentication** - every route requires a shared secret in the `WEBAPP_TOKEN` Script Property. Fails closed: with no token set, every route is refused. Constant-time comparison, and denials return a bare `DENIED`
 - **`admin.gs`** - the hand-run functions (`setWebAppToken`, `authorize`, `installMaintenanceTrigger`, `removeMaintenanceTrigger`), split out because the Run menu only lists the selected file
@@ -32,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI** - `.github/workflows/tests.yml` runs the unit and mutation suites on push and pull request
 
 ### Changed
+- **Toolkit split by job** - `reorg_toolkit.gs` (about 1,800 lines) is now five files: shared settings and helpers stay in `reorg_toolkit.gs`; `toolkit_webapp.gs` (entry points, token check), `toolkit_filters.gs`, `toolkit_filing.gs` and `toolkit_reports.gs`. Every function moved unchanged
+- **BREAKING: Web App requests are POST only, token in the body** - GET access is removed; a GET is always refused, and any POST with a query string is refused, so a token in a URL never works. Callers change `curl -L "$URL?fn=X&token=T"` to `curl -L "$URL" --data-urlencode fn=X --data-urlencode token=T`; `--data-urlencode` makes it a POST, and adding `-X POST` breaks the redirect Apps Script answers with
 - `setWebAppToken()` writes the new token to the execution log, because the editor's Run button discards return values. The log keeps that copy until the token is rotated
 - Requests with no `fn` now return `Unknown fn` instead of running the `overlaps` report
 - `applyLabelToThreads` and `removeOldLabel` now accept `batchStats` and route through `withRetry`
@@ -41,20 +44,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Repeated literals replaced with named constants (`_PAGE_SIZE`, the runtime budgets). `MAX_RUNTIME` had been declared 10 times at three different values while `CONFIG.MAX_RUNTIME_MS` already existed
 
 ### Removed
-- `?fn=passFreset` and `passF`'s saved resume offset - `passF` now works from thread-id sets and needs no position: a rerun skips whatever is already filed
-- `?fn=linkedinnoise` and `linkedinNoiseBackfill_` - a one-off backfill that has had nothing to move since its single run. Delivery filters now file that mail on arrival
+- `fn=passFreset` and `passF`'s saved resume offset - `passF` now works from thread-id sets and needs no position: a rerun skips whatever is already filed
+- `fn=linkedinnoise` and `linkedinNoiseBackfill_` - a one-off backfill that has had nothing to move since its single run. Delivery filters now file that mail on arrival
 - The gateway's `search()` op, which only that backfill used
 - **Finished one-off toolkit routes** - `passA`-`passE`, `passFtrash`, `cleanup`, `recover`, `overlaps`, `flattenReading`, `productbc`, `miscextract`, `consolidate`, `cleanupparents`, `driftmerge` and `inboxtriage`, with the helpers only they used. Each was a migration that has already run. The toolkit no longer trashes mail
-- `?fn=nutrilawn` - it called a function that did not exist, so any request to it failed
+- `fn=nutrilawn` - it called a function that did not exist, so any request to it failed
 - The gateway's `getLabel()` and `deleteLabel()` ops and the `fakeLabel` test helper, which only `driftmerge` used
 
 ### Fixed
+- **Migrations could be marked complete after a partial read** - `migrateSingleLabel` read the source label leniently, so a page that failed to load left those threads behind while the migration reported success and was never retried; if the first page failed it saw "no threads" and did the same. It now reads strictly with retries, and on failure moves nothing and is not marked complete
 - **`passF` failed on a large SpamChecked backlog** - asking each of a few thousand SpamChecked threads for its labels never completed: one run hit the 6-minute limit, another failed with "Could not locate target object". It now reads each label's thread ids once and examines only SpamChecked threads that no filing label holds; a live dry run on the same backlog finished in under a minute. It stops without labelling if a label cannot be read or reading labels uses up the time budget, and checks the budget before each unfiled thread
-- **Reports measured against the pre-reorg labels** - `?fn=counts` summed each plan label with its long-gone migration sources, and `?fn=diagnose` listed every current label as "not in plan" because it compared against those source names. Both now use the plan label list and take the spam tool's labels from configuration instead of a fixed list of three. `counts` reports a label it cannot read as `READ FAILED`, warns which totals are then off, and stops at its time budget with a note instead of being killed; `diagnose` reports a label whose count cannot be read instead of dropping it
+- **Reports measured against the pre-reorg labels** - `fn=counts` summed each plan label with its long-gone migration sources, and `fn=diagnose` listed every current label as "not in plan" because it compared against those source names. Both now use the plan label list and take the spam tool's labels from configuration instead of a fixed list of three. `counts` reports a label it cannot read as `READ FAILED`, warns which totals are then off, and stops at its time budget with a note instead of being killed; `diagnose` reports a label whose count cannot be read instead of dropping it
 - **Backup stopped without a summary** - a failed periodic save in `createBackup()` aborted the whole run with no report. The save now happens as part of writing a row, so a failure counts that row as failed and the backup is reported incomplete
 - **Spam-label lookup fooled by prototype names** - the inbox sweep and `passF` looked label names up on plain objects, so a label named `constructor` or `toString` was treated as a spam-tool label. Lookups now go through `_hasOwn_`, an own-property check shared by the sweep's `_classifyThread_`, `passF` and the report helpers
-- **Silent backup failure** - both backups read labels through `getAllThreadsFromLabel`, which logs a failed page and returns a partial list, so a read error produced a short list that looked complete. They now use the new `getAllThreadsStrict`, which retries transient errors and then throws. `?fn=backup` marks a failed label `READ FAILED` and reports the run incomplete; `createBackup()` logs `BACKUP INCOMPLETE` with the labels it could not read and the threads it could not write, and no longer logs "Backup complete!" after stopping at the time limit
-- **Hand-made filters overwritten** - `rebuildfilters` treated any filter that added no label as an orphan and replaced it, so a hand-made filter on the same sender that forwarded mail, had an extra criterion, or archived mail the spec keeps in the inbox was rewritten, losing that setting or widening the filter. Such filters are now left alone unless `&force=1`
+- **Silent backup failure** - both backups read labels through `getAllThreadsFromLabel`, which logs a failed page and returns a partial list, so a read error produced a short list that looked complete. They now use the new `getAllThreadsStrict`, which retries transient errors and then throws. `fn=backup` marks a failed label `READ FAILED` and reports the run incomplete; `createBackup()` logs `BACKUP INCOMPLETE` with the labels it could not read and the threads it could not write, and no longer logs "Backup complete!" after stopping at the time limit
+- **Hand-made filters overwritten** - `rebuildfilters` treated any filter that added no label as an orphan and replaced it, so a hand-made filter on the same sender that forwarded mail, had an extra criterion, or archived mail the spec keeps in the inbox was rewritten, losing that setting or widening the filter. Such filters are now left alone unless `force=1`
 - **Inert retry settings** - `_safeCall` passed hardcoded values to `withRetry`, so `CONFIG.MAX_RETRIES` and `CONFIG.RETRY_BASE_DELAY_MS` had no effect on any toolkit route
 - **Weak token generation** - Web App tokens came from `Math.random()`, whose state is recoverable from its outputs. Now built from `Utilities.getUuid()`, backed by `SecureRandom`
 - **Prototype pollution in tallies** - a sender whose domain is `__proto__` corrupted counts keyed on message headers. Twelve such maps now use `Object.create(null)`

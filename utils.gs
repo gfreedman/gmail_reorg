@@ -137,14 +137,15 @@ function getAllThreadsFromLabel(labelOrName)
  * Get every thread on a label, throwing if any page cannot be read.
  *
  * getAllThreadsFromLabel logs a failed page and returns what it has so far,
- * which suits callers that are simply run again, such as migrations. A backup
- * cannot work that way: a short list looks exactly like a complete one. Each
- * page is retried on transient errors (see withRetry) before giving up.
+ * which suits callers that simply run again and skip what is done. Backups and
+ * migrations cannot work that way: a short list looks exactly like a complete
+ * one. Each page is retried on transient errors (see withRetry) before giving up.
  *
- * Callers pass no time budget: with the default settings the worst-case wait
- * is about 8.5 seconds per failed page (1 + 2 + 4 seconds plus jitter), inside
- * the 60-80 second margin both backups keep below the 6-minute limit. A retry
- * abandoned for time would be misreported as a failed label.
+ * The backups pass no time budget: with the default settings the worst-case
+ * wait is about 8.5 seconds per failed page (1 + 2 + 4 seconds plus jitter),
+ * inside the 60-80 second margin they keep below the 6-minute limit, and a
+ * retry abandoned for time would be misreported as a failed label. Migrations
+ * do pass one, because an abandoned read there just retries next run.
  *
  * @param {GmailLabel} label - Label to read.
  * @param {Object} [retryOpts] - Passed to withRetry; tests use it to shorten backoff.

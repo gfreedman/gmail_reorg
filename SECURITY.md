@@ -6,9 +6,10 @@
 what the [front page](https://gfreedman.github.io/gmail_reorg/) documents. It runs
 from the Apps Script editor, changes labels only, and never deletes a message.
 
-**The toolkit** (`reorg_toolkit.gs`, `admin.gs`) is a maintenance layer deployed
-as a Web App and driven over HTTP. It can relabel mail and rewrite your Gmail
-filters. Read it before running it against your own account.
+**The toolkit** (`reorg_toolkit.gs`, the `toolkit_*.gs` files and `admin.gs`) is
+a maintenance layer deployed as a Web App and driven over HTTP. It can relabel
+mail and rewrite your Gmail filters. Read it before running it against your own
+account.
 
 ## What the library can and cannot do
 
@@ -23,9 +24,9 @@ and can delete labels that hold no mail; that is all.
 
 Everything above, plus:
 
-- **Rewrite Gmail filters.** `?fn=rebuildfilters` creates and deletes delivery
-  filters to match the configured spec. Dry run by default; `&apply=1` to act.
-- **Serve mailbox data over HTTP.** `?fn=backup` returns every label and thread
+- **Rewrite Gmail filters.** `fn=rebuildfilters` creates and deletes delivery
+  filters to match the configured spec. Dry run by default; `apply=1` to act.
+- **Serve mailbox data over HTTP.** `fn=backup` returns every label and thread
   id as text; the diagnostics return sender domains and counts.
 
 Every mutating route is idempotent, re-runnable and dry-run by default.
@@ -36,11 +37,27 @@ The deployment is `ANYONE_ANONYMOUS` executing as the deploying user, which mean
 a request carries full Gmail authority. **An unguessable URL is not access
 control** — URLs leak through shell history, proxy logs and clipboards.
 
-Every route therefore requires a shared secret:
+**The token is the only access control.** Restricting the Web App to its owner
+would be stronger, because Google would then require a signed-in session on
+every request. It was not chosen because the toolkit is driven by `curl`, which
+would then need an OAuth access token on each call. If you only use the
+toolkit from a browser while signed in, prefer owner-only access.
+
+Every route therefore requires a shared secret, sent in the POST body:
 
 ```
-https://script.google.com/macros/s/<deployment>/exec?fn=counts&token=<token>
+read -s TOKEN    # paste the token; nothing is echoed or saved to shell history
+curl -sL "https://script.google.com/macros/s/<deployment>/exec" \
+  --data-urlencode "fn=counts" --data-urlencode "token=$TOKEN"
 ```
+
+- Requests are POST only. A GET is always refused without reading anything,
+  and any POST with a query string is refused, so a token in a URL never works.
+  Refusing cannot unsend a URL that was already sent, so never put the token in
+  one.
+- Residual exposure: Google receives the request body; while curl runs, other
+  users on the same machine can see its command line, including `$TOKEN`; and
+  the Apps Script execution log keeps the token written by `setWebAppToken()`.
 
 - The token lives in the Script Property `WEBAPP_TOKEN`, never in source.
 - `setWebAppToken()` in `admin.gs` mints one from `Utilities.getUuid()`

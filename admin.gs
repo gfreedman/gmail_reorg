@@ -1,5 +1,5 @@
 /**
- * Functions you run by hand, kept out of reorg_toolkit.gs so they are easy to
+ * Functions you run by hand, kept out of the toolkit files so they are easy to
  * find in the Apps Script editor's Run menu.
  *
  * Apps Script evaluates every .gs file into one global scope, so these reach the
@@ -34,12 +34,14 @@ const _TOKEN_PROPERTY = 'WEBAPP_TOKEN';
  * The execution log keeps a copy of the token. Treat that log like the token
  * itself; rotating replaces the token, so an old copy in the log stops working.
  *
+ * @param {Object} [deps] - Test injection point: {props}. The editor's Run
+ *     button passes nothing, so production always uses the real store.
  * @return {string} The new token.
  */
-function setWebAppToken()
+function setWebAppToken(deps)
 {
   const token = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
-  PropertiesService.getScriptProperties().setProperty(_TOKEN_PROPERTY, token);
+  _depProps_(deps).setProperty(_TOKEN_PROPERTY, token);
   // The editor's Run button discards return values; the execution log is the only place it shows.
   Logger.log('New Web App token: ' + token);
   return token;
