@@ -22,7 +22,7 @@ In the editor, click **+** next to **Files**, choose **Script**, and create thes
 | `analysis.gs` | Label analysis |
 | `reorganization.gs` | Migration execution |
 | `examples.gs` | Ready-to-run example scripts (optional) |
-| `tests.gs` | Test suite (optional; two of its suites test the toolkit, so they need `reorg_toolkit.gs` and `admin.gs`) |
+| `tests.gs` | Test suite (optional; three of its suites test the toolkit, so they need `reorg_toolkit.gs` and `admin.gs`) |
 | `reorg_toolkit.gs` | Web App toolkit for upkeep and diagnostics (optional) |
 | `admin.gs` | Toolkit setup functions you run by hand (optional, needs `reorg_toolkit.gs`) |
 | `appsscript.json` | Project manifest: turns on the Gmail advanced service the toolkit uses, and the Web App settings. Paste it over the project's own manifest (Project Settings > Show "appsscript.json") |
@@ -217,10 +217,10 @@ time replaces the trigger instead of adding another.
 | `?fn=selftest` | Deployed Web App; returns a pass/fail summary |
 | `node test/mutation_test.js` | A clone; no Apps Script needed |
 
-The first two run every suite in `tests.gs`. The third, which is what CI runs,
-runs only the two toolkit suites (filter rules and the write paths), then
-disables each toolkit safety check in turn to confirm a test catches it, and
-prints `SURVIVED` for any guard that nothing covers. Run it after touching a
+The first two run every suite in `tests.gs`. The third, which is what CI
+runs, runs three suites (filter rules, the toolkit's write paths, and the
+inbox sweep and backups), then disables each safety check in turn to confirm
+a test catches it, and prints `SURVIVED` for any guard that nothing covers. Run it after touching a
 guard. It loads the `.gs` files into a sandboxed scope with the Apps Script
 globals stubbed, so it never reaches Gmail, and it stubs the private
 configuration when `_private_data.gs` is absent.

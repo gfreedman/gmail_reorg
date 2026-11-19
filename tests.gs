@@ -351,7 +351,7 @@ function testFilterSpec(results)
 /**
  * Build a fake Gmail gateway that records every write.
  *
- * @param {Object} state - {labels, filters, userLabels, createError}
+ * @param {Object} state - {labels, filters, userLabels, labelsByName, inbox, createError}
  * @return {Object} Gateway with a .calls record
  */
 function fakeGateway(state)
@@ -363,6 +363,15 @@ function fakeGateway(state)
     listLabels: function() { return state.labels || []; },
     listFilters: function() { return state.filters || []; },
     getUserLabels: function() { return state.userLabels || []; },
+    getUserLabelByName: function(name)
+    {
+      return Object.prototype.hasOwnProperty.call(state.labelsByName || {}, name) ?
+        state.labelsByName[name] : null;
+    },
+    search: function(query, start, max)
+    {
+      return (state.inbox || []).slice(start, start + max);
+    },
     createFilter: function(resource)
     {
       if (state.createError) { throw new Error(state.createError); }
@@ -897,6 +906,293 @@ function testMutatingPaths(results)
     assertContains(gw.calls.removedFilters, 'old1', 'Superseded filter should go');
   }, results);
 
+}
+
+// ============================================================================
+// SWEEP AND BACKUP TESTS
+// ============================================================================
+
+/**
+ * Build a fake GmailThread carrying the given label names.
+ *
+ * @param {string} id - Thread id
+ * @param {Array<string>} labelNames - Names of the labels on the thread
+ * @param {string} [from] - Sender of the first message
+ * @return {Object} Fake thread; .archived records any archive call
+ */
+function fakeThread(id, labelNames, from)
+{
+  const thread = {
+    archived: false,
+    getId: function() { return id; },
+    getLabels: function()
+    {
+      return labelNames.map(function(n)
+      {
+        return {getName: function() { return n; }};
+      });
+    },
+    getMessages: function()
+    {
+      return [{getFrom: function() { return from || ''; }, getPlainBody: function() { return ''; }}];
+    },
+    getFirstMessageSubject: function() { return 'subject ' + id; },
+    getLastMessageDate: function() { return new Date(0); },
+    getMessageCount: function() { return 1; },
+    isUnread: function() { return false; },
+    moveToArchive: function() { thread.archived = true; }
+  };
+  return thread;
+}
+
+/**
+ * Build a fake destination label that records which threads it was added to.
+ *
+ * @param {string} name - Label name
+ * @return {Object} Fake label with an .added array
+ */
+function fakeDestLabel(name)
+{
+  const label = {
+    added: [],
+    getName: function() { return name; },
+    addToThread: function(t) { label.added.push(t.getId()); }
+  };
+  return label;
+}
+
+/**
+ * Build a fake label for backup reads, listing the given threads.
+ *
+ * @param {string} name - Label name
+ * @param {Array<Object>} threads - Fake threads on the label
+ * @param {boolean} [unreadable] - Throw on every read
+ * @return {Object} Fake label
+ */
+function fakeListLabel(name, threads, unreadable)
+{
+  return {
+    getName: function() { return name; },
+    getThreads: function(start, max)
+    {
+      if (unreadable)
+      {
+        throw new Error('Label read failed (permanent)');
+      }
+      return threads.slice(start, start + max);
+    }
+  };
+}
+
+/**
+ * Build a fake Script Properties store held in memory.
+ *
+ * @return {Object} Store with getProperty, setProperty, deleteProperty and .data
+ */
+function fakePropStore()
+{
+  const data = Object.create(null);
+  return {
+    data: data,
+    getProperty: function(k) { return k in data ? data[k] : null; },
+    setProperty: function(k, v) { data[k] = v; },
+    deleteProperty: function(k) { delete data[k]; }
+  };
+}
+
+/**
+ * Test suite for the daily inbox sweep, Pass F and the library backup.
+ *
+ * Each test drives the real function through fakes, so no test touches the
+ * mailbox, Script Properties or Drive.
+ *
+ * @param {Object} results - Results accumulator
+ */
+function testSweepsAndBackups(results)
+{
+  Logger.log('=== Sweep and Backup Tests ===');
+
+  const TOOL = {SpamChecked: 1, SuspectedSpam: 1};
+  const SUSPECT = {SuspectedSpam: 1};
+  const RULES = [['news.example', 'Reading']];
+
+  // --- _classifyThread_ ---
+
+  runTest('_classifyThread_ calls a thread with a non-tool label filed', function()
+  {
+    assertEquals(_classifyThread_(fakeThread('t', ['SpamChecked', 'Finance']), TOOL, SUSPECT), 'filed',
+      'Finance is a filing label');
+  }, results);
+
+  runTest('_classifyThread_ calls suspected spam suspect', function()
+  {
+    assertEquals(_classifyThread_(fakeThread('t', ['SpamChecked', 'SuspectedSpam']), TOOL, SUSPECT),
+      'suspect', 'Suspected spam is left alone');
+  }, results);
+
+  runTest('_classifyThread_ calls a thread with only tool labels unfiled', function()
+  {
+    assertEquals(_classifyThread_(fakeThread('t', ['SpamChecked']), TOOL, SUSPECT), 'unfiled',
+      'The spam checker label is not filing');
+    assertEquals(_classifyThread_(fakeThread('t', []), TOOL, SUSPECT), 'unfiled', 'No labels at all');
+  }, results);
+
+  runTest('_classifyThread_ is not fooled by a label named like a prototype member', function()
+  {
+    assertEquals(_classifyThread_(fakeThread('t', ['constructor']), TOOL, SUSPECT), 'filed',
+      'A real label called constructor is a filing label, not spam');
+  }, results);
+
+  // --- passInbox_ ---
+
+  runTest('passInbox_ labels an unfiled inbox thread by sender rule', function()
+  {
+    const reading = fakeDestLabel('Reading');
+    const gw = fakeGateway({labelsByName: {Reading: reading},
+      inbox: [fakeThread('t1', ['SpamChecked'], 'Ann <ann@news.example>')]});
+    passInbox_([], true, {gw: gw, rules: RULES, toolLabels: TOOL, suspectLabels: SUSPECT});
+    assertDeepEquals(reading.added, ['t1'], 'Should file the thread under Reading');
+  }, results);
+
+  runTest('passInbox_ leaves filed and suspected-spam threads alone', function()
+  {
+    const reading = fakeDestLabel('Reading');
+    const misc = fakeDestLabel('Misc');
+    const gw = fakeGateway({labelsByName: {Reading: reading, Misc: misc}, inbox: [
+      fakeThread('filed', ['Finance'], 'ann@news.example'),
+      fakeThread('spam', ['SuspectedSpam'], 'ann@news.example')]});
+    passInbox_([], true, {gw: gw, rules: RULES, toolLabels: TOOL, suspectLabels: SUSPECT});
+    assertEquals(reading.added.length + misc.added.length, 0, 'Nothing should be labelled');
+  }, results);
+
+  runTest('passInbox_ dry run labels nothing', function()
+  {
+    const reading = fakeDestLabel('Reading');
+    const gw = fakeGateway({labelsByName: {Reading: reading},
+      inbox: [fakeThread('t1', [], 'ann@news.example')]});
+    const out = [];
+    passInbox_(out, false, {gw: gw, rules: RULES, toolLabels: TOOL, suspectLabels: SUSPECT});
+    assertEquals(reading.added.length, 0, 'Dry run must not label');
+    assert(out.join('\n').indexOf('WOULD LABEL -> Reading') !== -1, 'Should report what it would do');
+  }, results);
+
+  runTest('passInbox_ falls back to Misc when the rule label is missing', function()
+  {
+    const misc = fakeDestLabel('Misc');
+    const gw = fakeGateway({labelsByName: {Misc: misc},
+      inbox: [fakeThread('t1', [], 'ann@news.example')]});
+    passInbox_([], true, {gw: gw, rules: RULES, toolLabels: TOOL, suspectLabels: SUSPECT});
+    assertDeepEquals(misc.added, ['t1'], 'An unfiled thread must still land in a bucket');
+  }, results);
+
+  runTest('passInbox_ never archives', function()
+  {
+    const thread = fakeThread('t1', [], 'ann@news.example');
+    const gw = fakeGateway({labelsByName: {Reading: fakeDestLabel('Reading')}, inbox: [thread]});
+    passInbox_([], true, {gw: gw, rules: RULES, toolLabels: TOOL, suspectLabels: SUSPECT});
+    assert(!thread.archived, 'The sweep labels only');
+  }, results);
+
+  // --- passF_ ---
+
+  runTest('passF_ files a SpamChecked-only thread and clears its offset at the end', function()
+  {
+    const reading = fakeDestLabel('Reading');
+    const sc = fakeListLabel('SpamChecked', [fakeThread('t1', ['SpamChecked'], 'ann@news.example')]);
+    const gw = fakeGateway({labelsByName: {SpamChecked: sc, Reading: reading}});
+    const props = fakePropStore();
+    props.setProperty('passF_offset', '0');
+    passF_([], true, {gw: gw, props: props, rules: RULES, toolLabels: TOOL, suspectLabels: SUSPECT});
+    assertDeepEquals(reading.added, ['t1'], 'Should file the thread');
+    assertNull(props.getProperty('passF_offset'), 'Reaching the end clears the resume point');
+  }, results);
+
+  runTest('passF_ dry run labels nothing and saves no offset', function()
+  {
+    const reading = fakeDestLabel('Reading');
+    const sc = fakeListLabel('SpamChecked', [fakeThread('t1', ['SpamChecked'], 'ann@news.example')]);
+    const gw = fakeGateway({labelsByName: {SpamChecked: sc, Reading: reading}});
+    const props = fakePropStore();
+    passF_([], false, {gw: gw, props: props, rules: RULES, toolLabels: TOOL, suspectLabels: SUSPECT});
+    assertEquals(reading.added.length, 0, 'Dry run must not label');
+    assertEquals(Object.keys(props.data).length, 0, 'Dry run must not save state');
+  }, results);
+
+  runTest('passF_ falls back to Misc when the rule label is missing', function()
+  {
+    const misc = fakeDestLabel('Misc');
+    const sc = fakeListLabel('SpamChecked', [fakeThread('t1', ['SpamChecked'], 'ann@news.example')]);
+    const gw = fakeGateway({labelsByName: {SpamChecked: sc, Misc: misc}});
+    passF_([], true, {gw: gw, props: fakePropStore(), rules: RULES, toolLabels: TOOL, suspectLabels: SUSPECT});
+    assertDeepEquals(misc.added, ['t1'], 'An unfiled thread must still land in a bucket');
+  }, results);
+
+  runTest('passF_ refuses to use real Script Properties when props is not injected', function()
+  {
+    let message = '';
+    try
+    {
+      passF_([], false, {gw: fakeGateway({})});
+    }
+    catch (e)
+    {
+      message = String(e && e.message);
+    }
+    assert(message.indexOf('refusing to use real Script Properties') !== -1, 'Must be refused by the guard');
+  }, results);
+
+  // --- library backup ---
+
+  runTest('collectBackupRows writes a thread under two labels once', function()
+  {
+    const shared = fakeThread('shared', ['A', 'B']);
+    const rows = [];
+    const result = collectBackupRows(
+      [fakeListLabel('A', [shared]), fakeListLabel('B', [shared, fakeThread('b1', ['B'])])],
+      new Date().getTime(), function(r) { rows.push(r[0]); });
+    assertDeepEquals(rows, ['shared', 'b1'], 'Each thread once, in label order');
+    assertEquals(result.skipped, 1, 'The second sighting is a skip');
+    assertEquals(describeBackupProblems(result).length, 0, 'A clean run reports no problems');
+  }, results);
+
+  runTest('collectBackupRows retries a failed thread from its next label', function()
+  {
+    const shared = fakeThread('shared', ['A', 'B']);
+    let calls = 0;
+    const result = collectBackupRows(
+      [fakeListLabel('A', [shared]), fakeListLabel('B', [shared])],
+      new Date().getTime(), function()
+      {
+        calls++;
+        if (calls === 1)
+        {
+          throw new Error('write failed');
+        }
+      });
+    assertEquals(result.written, 1, 'The second label writes it');
+    assertEquals(result.failedThreads, 0, 'A thread written in the end is not a failure');
+  }, results);
+
+  runTest('collectBackupRows stops at the time limit and says so', function()
+  {
+    // A start time an hour ago is past any budget.
+    const result = collectBackupRows([fakeListLabel('A', [fakeThread('a1', ['A'])])],
+      new Date().getTime() - 3600000, function() {});
+    assert(result.timedOut, 'Should stop before reading');
+    assertEquals(result.written, 0, 'Nothing should be written after the limit');
+    assert(describeBackupProblems(result).join('; ').indexOf('stopped at the time limit') !== -1,
+      'Should report the stop');
+  }, results);
+
+  runTest('collectBackupRows reports an unreadable label and an unwritable thread', function()
+  {
+    const result = collectBackupRows(
+      [fakeListLabel('Broken', [], true), fakeListLabel('A', [fakeThread('a1', ['A'])])],
+      new Date().getTime(), function() { throw new Error('write failed'); });
+    const problems = describeBackupProblems(result).join('; ');
+    assert(problems.indexOf('Broken') !== -1, 'Should name the unreadable label');
+    assert(problems.indexOf('1 thread(s) could not be written') !== -1, 'Should count the unwritten thread');
+  }, results);
 }
 
 // ============================================================================
@@ -1661,6 +1957,7 @@ function runAllTests()
   Logger.log('');
 
   testMutatingPaths(results);
+  testSweepsAndBackups(results);
   Logger.log('');
 
   testValidateOrganizationPlan(results);
