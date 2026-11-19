@@ -436,6 +436,42 @@ function _passF_dest(fromAddr, allRules)
 }
 
 /**
+ * Decide whether a thread is already filed, suspected spam, or still unfiled.
+ *
+ * Labels the spam-checking tool owns do not count as filing. A thread carrying
+ * one of its "suspect" labels is left alone even if it has no other label.
+ * Lookups use hasOwnProperty, so a label named like an Object.prototype member
+ * (constructor, toString) is never mistaken for a spam-tool label.
+ *
+ * @param {GmailThread} thread - Thread to inspect.
+ * @param {Object} toolLabels - Names of every label the spam tool owns.
+ * @param {Object} suspectLabels - Names of the spam tool's "suspect" labels.
+ * @return {string} 'filed', 'suspect' or 'unfiled'.
+ */
+function _classifyThread_(thread, toolLabels, suspectLabels)
+{
+  const has = function(map, key)
+  {
+    return Object.prototype.hasOwnProperty.call(map, key);
+  };
+  const labels = thread.getLabels();
+  let isSuspect = false;
+  for (let k = 0; k < labels.length; k++)
+  {
+    const n = labels[k].getName();
+    if (has(suspectLabels, n))
+    {
+      isSuspect = true;
+    }
+    else if (!has(toolLabels, n))
+    {
+      return 'filed';
+    }
+  }
+  return isSuspect ? 'suspect' : 'unfiled';
+}
+
+/**
  * Pass F: file mail the spam tool has seen but that carries no other user label.
  *
  * Runs on an offset checkpoint so a long backlog can be worked through across
@@ -443,15 +479,20 @@ function _passF_dest(fromAddr, allRules)
  *
  * @param {Array<string>} out - Accumulator for output lines; returned to the caller as text.
  * @param {boolean} apply - False for a dry run that only reports; true to execute.
+ * @param {Object} [deps] - Test injection point: {gw, props, rules, toolLabels,
+ *     suspectLabels}. Production omits it.
+ * @throws {Error} If deps is supplied without props (see _depProps_).
  */
-function passF_(out, apply)
+function passF_(out, apply, deps)
 {
   const startTime = new Date().getTime();
   const MAX_RUNTIME = _RUNTIME_MS;
+  const gw = _depGw_(deps);
+  const props = _depProps_(deps);
   out.push((apply ? 'APPLY' : 'DRY-RUN') + ' Pass F — capture SpamChecked-only received mail');
   out.push('---');
 
-  const sc = GmailApp.getUserLabelByName('SpamChecked');
+  const sc = gw.getUserLabelByName('SpamChecked');
   if (!sc)
   {
     out.push('No SpamChecked label found');
@@ -460,17 +501,26 @@ function passF_(out, apply)
 
   // The _PASS_*_RULES tables are named after the original reorg passes, which are
   // gone; the sender rules they hold are still current.
-  const allRules = [].concat(_MISC_TO, _PASS_F_RULES, _PASS_B_RULES, _PASS_C_LABEL_RULES, _PASS_D_LABEL_RULES);
+  const allRules = _dep_(deps, 'rules',
+    [].concat(_MISC_TO, _PASS_F_RULES, _PASS_B_RULES, _PASS_C_LABEL_RULES, _PASS_D_LABEL_RULES));
+  const toolLabels = _dep_(deps, 'toolLabels', _SPAM_TOOL_LABELS);
+  const suspectLabels = _dep_(deps, 'suspectLabels', _SPAM_SUSPECT_LABELS);
   // Null-prototype map keyed on label names, so a key can never collide with
   // something on Object.prototype such as __proto__ or constructor.
   const dstCache = Object.create(null);
+  /**
+   * @param {string} name - Destination label name.
+   * @return {GmailLabel|null} The label, looked up once per run.
+   */
   const getDst = function(name)
   {
-    if (dstCache[name] === undefined) dstCache[name] = GmailApp.getUserLabelByName(name) || null;
+    if (dstCache[name] === undefined)
+    {
+      dstCache[name] = gw.getUserLabelByName(name) || null;
+    }
     return dstCache[name];
   };
 
-  const props = PropertiesService.getScriptProperties();
   // Resume point between runs. Approximate: new SpamChecked mail lands at the
   // front and shifts the list, so threads that arrive between runs are only
   // reached after passFreset. Re-running is safe because filed threads are skipped.
@@ -492,27 +542,25 @@ function passF_(out, apply)
     if (threads.length === 0)
     {
       out.push('Reached end of SpamChecked at offset ' + offset);
-      if (apply) props.deleteProperty('passF_offset');
+      if (apply)
+      {
+        props.deleteProperty('passF_offset');
+      }
       break;
     }
     for (let i = 0; i < threads.length; i++)
     {
       const t = threads[i];
-      const labels = t.getLabels();
-      let hasOrg = false;
-      let isSuspect = false;
-      for (let k = 0; k < labels.length; k++)
+      const state = _classifyThread_(t, toolLabels, suspectLabels);
+      if (state === 'filed')
       {
-        const n = labels[k].getName();
-        if (_SPAM_SUSPECT_LABELS[n]) isSuspect = true;
-        else if (!_SPAM_TOOL_LABELS[n]) hasOrg = true;
+        continue; // already in an org bucket — idempotent skip
       }
-      if (hasOrg) continue; // already in an org bucket — idempotent skip
-      if (isSuspect)
+      if (state === 'suspect')
       {
-        skippedSuspect++;
+        skippedSuspect++; // leave suspected spam alone
         continue;
-      } // leave suspected spam alone
+      }
 
       let from = '';
       try
@@ -544,15 +592,21 @@ function passF_(out, apply)
           out.push('  WARN dest missing: ' + destName + ' -> filing under Misc');
           dst = getDst('Misc');
         }
-        if (dst) _safeCall(function()
+        if (dst)
         {
-          dst.addToThread(t);
-          return null;
-        }, 'addLabel ' + destName, out);
+          _safeCall(function()
+          {
+            dst.addToThread(t);
+            return null;
+          }, 'addLabel ' + destName, out);
+        }
       }
     }
     offset += threads.length;
-    if (apply) props.setProperty('passF_offset', String(offset));
+    if (apply)
+    {
+      props.setProperty('passF_offset', String(offset));
+    }
   }
 
   out.push('---');
@@ -593,23 +647,36 @@ function passF_(out, apply)
  *
  * @param {Array<string>} out - Accumulator for output lines; returned to the caller as text.
  * @param {boolean} apply - False for a dry run that only reports; true to execute.
+ * @param {Object} [deps] - Test injection point: {gw, rules, toolLabels,
+ *     suspectLabels}. Production omits it.
  */
-function passInbox_(out, apply)
+function passInbox_(out, apply, deps)
 {
   const startTime = new Date().getTime();
   const MAX_RUNTIME = _RUNTIME_MS;
+  const gw = _depGw_(deps);
   out.push((apply ? 'APPLY' : 'DRY-RUN') + ' Inbox sweep — label inbox threads into org buckets (no archiving)');
   out.push('---');
 
   // The _PASS_*_RULES tables are named after the original reorg passes, which are
   // gone; the sender rules they hold are still current.
-  const allRules = [].concat(_MISC_TO, _PASS_F_RULES, _PASS_B_RULES, _PASS_C_LABEL_RULES, _PASS_D_LABEL_RULES);
+  const allRules = _dep_(deps, 'rules',
+    [].concat(_MISC_TO, _PASS_F_RULES, _PASS_B_RULES, _PASS_C_LABEL_RULES, _PASS_D_LABEL_RULES));
+  const toolLabels = _dep_(deps, 'toolLabels', _SPAM_TOOL_LABELS);
+  const suspectLabels = _dep_(deps, 'suspectLabels', _SPAM_SUSPECT_LABELS);
   // Null-prototype map keyed on label names, so a key can never collide with
   // something on Object.prototype such as __proto__ or constructor.
   const dstCache = Object.create(null);
+  /**
+   * @param {string} name - Destination label name.
+   * @return {GmailLabel|null} The label, looked up once per run.
+   */
   const getDst = function(name)
   {
-    if (dstCache[name] === undefined) dstCache[name] = GmailApp.getUserLabelByName(name) || null;
+    if (dstCache[name] === undefined)
+    {
+      dstCache[name] = gw.getUserLabelByName(name) || null;
+    }
     return dstCache[name];
   };
 
@@ -628,27 +695,19 @@ function passInbox_(out, apply)
       out.push('TIME BUDGET HIT at offset ' + offset);
       break;
     }
-    const threads = GmailApp.search('in:inbox', offset, PAGE);
+    const threads = gw.search('in:inbox', offset, PAGE);
     if (threads.length === 0) break;
     for (let i = 0; i < threads.length; i++)
     {
       const t = threads[i];
       total++;
-      const labels = t.getLabels();
-      let hasOrg = false,
-        isSuspect = false;
-      for (let k = 0; k < labels.length; k++)
-      {
-        const n = labels[k].getName();
-        if (_SPAM_SUSPECT_LABELS[n]) isSuspect = true;
-        else if (!_SPAM_TOOL_LABELS[n]) hasOrg = true;
-      }
-      if (hasOrg)
+      const state = _classifyThread_(t, toolLabels, suspectLabels);
+      if (state === 'filed')
       {
         covered++;
         continue;
       }
-      if (isSuspect)
+      if (state === 'suspect')
       {
         suspect++;
         continue;
@@ -800,18 +859,13 @@ function miscBreakdown_(out)
  *
  * @param {Array<string>} out - Accumulator for output lines; returned to the caller as text.
  * @param {Object} [deps] - Test injection point: {gw, props}. Production omits it.
- * @throws {Error} If deps is supplied without props, so a test can never reach
- *     the real Script Properties and clobber a real resume checkpoint.
+ * @throws {Error} If deps is supplied without props (see _depProps_).
  */
 function backup_(out, deps)
 {
   const startTime = new Date().getTime();
   const gw = _depGw_(deps);
-  if (deps && !deps.props)
-  {
-    throw new Error('deps supplied without props — refusing to use real Script Properties');
-  }
-  const props = deps ? deps.props : PropertiesService.getScriptProperties();
+  const props = _depProps_(deps);
   const labels = gw.getUserLabels();
   let labelIdx = parseInt(props.getProperty('backup_labelIdx') || '0', 10);
   let failed = parseInt(props.getProperty('backup_failed') || '0', 10);
@@ -872,6 +926,29 @@ function backup_(out, deps)
 // intended behaviour — an absent configuration must abort the run, not quietly
 // reduce it to a no-op that reports success. Tests declare their own stubs (see
 // test/mutation_test.js) rather than making this file tolerate the gap.
+/**
+ * Resolve the Script Properties store, refusing to default it once deps is supplied.
+ *
+ * Same reasoning as _depGw_: a test that forgets props must fail loudly rather
+ * than read or overwrite a real resume checkpoint.
+ *
+ * @param {Object} [deps] - Injected dependencies, or null in production.
+ * @return {Object} Properties store to use.
+ * @throws {Error} If deps is supplied without a props key.
+ */
+function _depProps_(deps)
+{
+  if (!deps)
+  {
+    return PropertiesService.getScriptProperties();
+  }
+  if (!deps.props)
+  {
+    throw new Error('deps supplied without props — refusing to use real Script Properties');
+  }
+  return deps.props;
+}
+
 /**
  * Resolve one injected dependency, falling back to production configuration.
  *

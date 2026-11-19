@@ -1,5 +1,5 @@
 /**
- * Mutation tests for the toolkit's safety guards in reorg_toolkit.gs and admin.gs.
+ * Mutation tests for the safety guards in reorg_toolkit.gs, admin.gs and backup.gs.
  *
  * A passing test suite only means something if it fails when the code breaks.
  * This deliberately breaks one guard at a time and asserts that the expected
@@ -88,9 +88,29 @@ const MUTATIONS = [
    "if (false)",
    ['does not delete a superseded filter that forwards mail']],
   ['backup props guard removed',
-   "if (deps && !deps.props)",
-   "if (false)",
+   "if (!deps.props) { throw new Error('deps supplied without props — refusing to use real Script Properties'); }",
+   "if (false) { }",
    ['refuses to use real Script Properties']],
+  ['sweep classifier ignores suspected spam',
+   "if (has(suspectLabels, n))",
+   "if (false)",
+   ['calls suspected spam suspect']],
+  ['sweep classifier uses plain lookups again',
+   "return Object.prototype.hasOwnProperty.call(map, key);",
+   "return !!map[key];",
+   ['not fooled by a label named like a prototype member']],
+  ['inbox sweep dry run writes',
+   "if (apply) { let d = getDst(dest);",
+   "if (true) { let d = getDst(dest);",
+   ['passInbox_ dry run labels nothing']],
+  ['inbox sweep Misc fallback removed',
+   "d = getDst('Misc');",
+   "d = null;",
+   ['falls back to Misc when the rule label is missing']],
+  ['backup counts a recovered thread as failed',
+   "delete failedThreadIds[threadId];",
+   "",
+   ['retries a failed thread from its next label']],
 ];
 
 /**
@@ -117,8 +137,8 @@ function anchor(literal)
  * Apps Script evaluates every .gs file into a single global scope; concatenating
  * the sources into one Function body reproduces that.
  *
- * @param {{toolkit: string, admin: string}} sources - Source text of
- *     reorg_toolkit.gs and admin.gs, possibly mutated
+ * @param {{toolkit: string, admin: string, backup: string}} sources - Source
+ *     text of reorg_toolkit.gs, admin.gs and backup.gs, possibly mutated
  * @return {{passed: number, failed: number, errors: Array<Object>}} Suite
  *     results; failed is -1 if the sources did not load
  */
@@ -134,7 +154,14 @@ function runSuite(sources)
   // read; they exist only to satisfy the eager argument evaluation in _dep_.
   const PRIVATE_STUBS = [
     'const _FILTER_SPEC = [];',
-    'const _FILTER_SUPERSEDED = [];'
+    'const _FILTER_SUPERSEDED = [];',
+    'const _MISC_TO = [];',
+    'const _PASS_B_RULES = [];',
+    'const _PASS_C_LABEL_RULES = [];',
+    'const _PASS_D_LABEL_RULES = [];',
+    'const _PASS_F_RULES = [];',
+    'const _SPAM_TOOL_LABELS = {};',
+    'const _SPAM_SUSPECT_LABELS = {};'
   ].join('\n');
 
   const privPath = R + '_private_data.gs';
@@ -164,10 +191,12 @@ function runSuite(sources)
       }
     };
   `;
-  const body = prelude + priv + '\n' + utils + '\n' + sources.toolkit + '\n' + sources.admin + '\n' + tests + `
+  const body = prelude + priv + '\n' + utils + '\n' + sources.backup + '\n' + sources.toolkit + '\n' +
+    sources.admin + '\n' + tests + `
     var results = {passed: 0, failed: 0, errors: []};
     testFilterSpec(results);
     testMutatingPaths(results);
+    testSweepsAndBackups(results);
     return results;
   `;
   try
@@ -183,7 +212,7 @@ function runSuite(sources)
 // Mutations may target any source file, not just the toolkit: the maintenance
 // trigger lives in admin.gs, and anchoring only in reorg_toolkit.gs silently
 // reported those mutants as "anchor not found".
-const MUTABLE = ['reorg_toolkit.gs', 'admin.gs'];
+const MUTABLE = ['reorg_toolkit.gs', 'admin.gs', 'backup.gs'];
 const clean = {};
 MUTABLE.forEach(function(f)
 {
@@ -195,13 +224,14 @@ MUTABLE.forEach(function(f)
  *
  * @param {Object<string, string>|null} overrides - Mutated source text keyed
  *     by file name, or null for the unmodified sources
- * @return {{toolkit: string, admin: string}} Sources to pass to runSuite
+ * @return {{toolkit: string, admin: string, backup: string}} Sources to pass to runSuite
  */
 function sourcesFrom(overrides)
 {
   return {
     toolkit: (overrides && overrides['reorg_toolkit.gs']) || clean['reorg_toolkit.gs'],
-    admin: (overrides && overrides['admin.gs']) || clean['admin.gs']
+    admin: (overrides && overrides['admin.gs']) || clean['admin.gs'],
+    backup: (overrides && overrides['backup.gs']) || clean['backup.gs']
   };
 }
 

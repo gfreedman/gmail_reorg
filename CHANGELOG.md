@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Injectable Gmail gateway** (`_GW`, `_dep_`, `_depGw_`) so `rebuildFilters_` can be tested against a fake without touching a mailbox. `_depGw_` throws if a caller supplies `deps` without a gateway, rather than silently falling through to live Gmail
 - **Static filter-conflict detection** — Gmail runs every matching filter, so overlapping criteria double-label. `_specConflicts_` catches that before anything is written and aborts an `&apply=1` run
 - **Hand-edit protection** — without `&force=1`, `rebuildfilters` leaves alone a spec-sender filter that adds a label other than the spec's, has a different inbox setting, archives mail the spec keeps in the inbox, forwards mail, or has extra criteria such as a subject. A filter that adds no label and has none of those is treated as an orphan: deleted and recreated, keeping any other removed labels, and reported as FAILED if the recreate fails. A superseded filter is deleted unless it forwards mail or has extra criteria
-- Test suites `testFilterSpec` and `testMutatingPaths` in `tests.gs` (61 cases), using injected fixtures so they run without the private configuration file
+- Test suites `testFilterSpec`, `testMutatingPaths` and `testSweepsAndBackups` in `tests.gs` (76 cases), using injected fixtures so they run without the private configuration file. They cover the daily inbox sweep, `passF` and the library backup's counting and failure handling
 - `test/mutation_test.js` — mutation runner that breaks one guard at a time and asserts a test catches it
 - `?fn=selftest` route to run the whole suite over HTTP
 - `.claspignore` to keep `test/` out of the Apps Script push
@@ -48,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The gateway's `getLabel()` and `deleteLabel()` ops and the `fakeLabel` test helper, which only `driftmerge` used
 
 ### Fixed
+- **Spam-label lookup fooled by prototype names** - the inbox sweep and `passF` looked label names up on plain objects, so a label named `constructor` or `toString` was treated as a spam-tool label. Both now share `_classifyThread_`, which uses own-property lookups
 - **Silent backup failure** - both backups read labels through `getAllThreadsFromLabel`, which logs a failed page and returns a partial list, so a read error produced a short list that looked complete. They now use the new `getAllThreadsStrict`, which retries transient errors and then throws. `?fn=backup` marks a failed label `READ FAILED` and reports the run incomplete; `createBackup()` logs `BACKUP INCOMPLETE` with the labels it could not read and the threads it could not write, and no longer logs "Backup complete!" after stopping at the time limit
 - **Hand-made filters overwritten** - `rebuildfilters` treated any filter that added no label as an orphan and replaced it, so a hand-made filter on the same sender that forwarded mail, had an extra criterion, or archived mail the spec keeps in the inbox was rewritten, losing that setting or widening the filter. Such filters are now left alone unless `&force=1`
 - **Inert retry settings** - `_safeCall` passed hardcoded values to `withRetry`, so `CONFIG.MAX_RETRIES` and `CONFIG.RETRY_BASE_DELAY_MS` had no effect on any toolkit route

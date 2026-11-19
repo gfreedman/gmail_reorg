@@ -68,103 +68,28 @@ function createBackup()
   sheet.setFrozenRows(1);
 
   const labels = GmailApp.getUserLabels();
-  // Null-prototype map keyed on thread IDs, so a key can never collide with
-  // something on Object.prototype such as __proto__ or constructor.
-  const processedThreadIds = Object.create(null);  // Track processed threads to avoid duplicates
-  let row = 2;
-  let skippedCount = 0;
-  const failedLabels = [];
-  // Null-prototype map keyed on thread IDs; an ID leaves the map once written.
-  const failedThreadIds = Object.create(null);
-  let timedOut = false;
-
   log('Found ' + labels.length + ' labels to process');
 
-  // Process each label
-  for (let i = 0; i < labels.length; i++)
+  let row = 2;
+  const result = collectBackupRows(labels, startTime, function(rowData)
   {
-    // Check time remaining before processing each label
-    if (!hasTimeRemaining(startTime, BACKUP_CONFIG.MAX_RUNTIME_MS))
+    // Flush periodically to save progress. Done before the write, so a failed
+    // flush fails this row cleanly instead of after it has been written.
+    if (row > 2 && row % BACKUP_CONFIG.FLUSH_INTERVAL === 0)
     {
-      logWarning('Time limit reached. This backup is PARTIAL: ' + (row - 2) + ' threads written. ' +
-        'A rerun starts a new backup from the beginning.');
-      timedOut = true;
-      break;
+      SpreadsheetApp.flush();
+      log('Progress: ' + (row - 2) + ' threads backed up...');
     }
-
-    const label = labels[i];
-    const labelName = label.getName();
-
-    log('Processing label ' + (i + 1) + '/' + labels.length + ': ' + labelName);
-
-    let threads;
-    try
-    {
-      threads = getAllThreadsStrict(label);
-    }
-    catch (e)
-    {
-      logError('Error getting threads from "' + labelName + '": ' + e.message);
-      failedLabels.push(labelName);
-      continue;
-    }
-
-    // Process each thread in this label
-    for (let j = 0; j < threads.length; j++)
-    {
-      const thread = threads[j];
-      const threadId = thread.getId();
-
-      // Skip if we've already processed this thread (from another label)
-      if (processedThreadIds[threadId])
-      {
-        skippedCount++;
-        continue;
-      }
-
-      try
-      {
-        const rowData = extractThreadData(thread);
-        sheet.getRange(row, 1, 1, rowData.length).setValues([rowData]);
-        row++;
-        // Marked only once written, so a thread that fails here can still be
-        // picked up from another of its labels.
-        processedThreadIds[threadId] = true;
-        delete failedThreadIds[threadId];
-      }
-      catch (e)
-      {
-        logError('Error processing thread ' + threadId + ': ' + e.message);
-        failedThreadIds[threadId] = true;
-      }
-
-      // Flush periodically to prevent timeout and save progress
-      if (row % BACKUP_CONFIG.FLUSH_INTERVAL === 0)
-      {
-        SpreadsheetApp.flush();
-        log('Progress: ' + (row - 2) + ' threads backed up...');
-      }
-    }
-  }
+    sheet.getRange(row, 1, 1, rowData.length).setValues([rowData]);
+    row++;
+  });
 
   // Format the sheet for readability
   formatBackupSheet(sheet, headers.length);
 
-  const totalThreads = row - 2;
-  const problems = [];
-  if (timedOut)
-  {
-    problems.push('stopped at the time limit');
-  }
-  if (failedLabels.length > 0)
-  {
-    problems.push(failedLabels.length + ' label(s) could not be read: ' + failedLabels.join(', '));
-  }
-  const failedThreads = Object.keys(failedThreadIds).length;
-  if (failedThreads > 0)
-  {
-    problems.push(failedThreads + ' thread(s) could not be written');
-  }
+  const totalThreads = result.written;
+  const skippedCount = result.skipped;
+  const problems = describeBackupProblems(result);
   if (problems.length > 0)
   {
     logWarning('BACKUP INCOMPLETE — ' + problems.join('; ') + '. Do not rely on this backup.');
@@ -178,6 +103,112 @@ function createBackup()
   log('Spreadsheet URL: ' + ss.getUrl());
 
   return ss.getUrl();
+}
+
+/**
+ * Walk every label and hand one row per unique thread to writeRow.
+ *
+ * Kept apart from the spreadsheet so the counting and failure handling can be
+ * tested without creating a real sheet. A thread that appears under several
+ * labels is written once. A thread whose row fails is retried from its next
+ * label, and counts as failed only if no label ever writes it.
+ *
+ * @param {Array<GmailLabel>} labels - Labels to back up, in order.
+ * @param {number} startTime - Run start (ms since epoch), for the time limit.
+ * @param {Function} writeRow - Called with each row array; may throw.
+ * @return {{written: number, skipped: number, failedLabels: Array<string>,
+ *     failedThreads: number, timedOut: boolean}} What happened.
+ */
+function collectBackupRows(labels, startTime, writeRow)
+{
+  // Null-prototype maps keyed on thread IDs, so a key can never collide with
+  // something on Object.prototype such as __proto__ or constructor.
+  const processedThreadIds = Object.create(null);
+  const failedThreadIds = Object.create(null);
+  const result = {written: 0, skipped: 0, failedLabels: [], failedThreads: 0, timedOut: false};
+
+  for (let i = 0; i < labels.length; i++)
+  {
+    // Check time remaining before processing each label
+    if (!hasTimeRemaining(startTime, BACKUP_CONFIG.MAX_RUNTIME_MS))
+    {
+      logWarning('Time limit reached. This backup is PARTIAL: ' + result.written + ' threads written. ' +
+        'A rerun starts a new backup from the beginning.');
+      result.timedOut = true;
+      break;
+    }
+
+    const label = labels[i];
+    const labelName = label.getName();
+    log('Processing label ' + (i + 1) + '/' + labels.length + ': ' + labelName);
+
+    let threads;
+    try
+    {
+      threads = getAllThreadsStrict(label);
+    }
+    catch (e)
+    {
+      logError('Error getting threads from "' + labelName + '": ' + e.message);
+      result.failedLabels.push(labelName);
+      continue;
+    }
+
+    for (let j = 0; j < threads.length; j++)
+    {
+      const thread = threads[j];
+      const threadId = thread.getId();
+
+      // Skip if we've already written this thread (from another label)
+      if (processedThreadIds[threadId])
+      {
+        result.skipped++;
+        continue;
+      }
+
+      try
+      {
+        writeRow(extractThreadData(thread));
+        result.written++;
+        // Marked only once written, so a thread that fails here can still be
+        // picked up from another of its labels.
+        processedThreadIds[threadId] = true;
+        delete failedThreadIds[threadId];
+      }
+      catch (e)
+      {
+        logError('Error processing thread ' + threadId + ': ' + e.message);
+        failedThreadIds[threadId] = true;
+      }
+    }
+  }
+
+  result.failedThreads = Object.keys(failedThreadIds).length;
+  return result;
+}
+
+/**
+ * List the reasons a backup is incomplete, if any.
+ *
+ * @param {Object} result - Return value of collectBackupRows.
+ * @return {Array<string>} One reason per problem; empty if the backup is complete.
+ */
+function describeBackupProblems(result)
+{
+  const problems = [];
+  if (result.timedOut)
+  {
+    problems.push('stopped at the time limit');
+  }
+  if (result.failedLabels.length > 0)
+  {
+    problems.push(result.failedLabels.length + ' label(s) could not be read: ' + result.failedLabels.join(', '));
+  }
+  if (result.failedThreads > 0)
+  {
+    problems.push(result.failedThreads + ' thread(s) could not be written');
+  }
+  return problems;
 }
 
 /**
