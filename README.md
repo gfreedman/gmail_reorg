@@ -60,6 +60,13 @@ createBackup();
 createLabelSummary();
 ```
 
+`createBackup()` writes one row per thread and reads each thread's first
+message, so it manages roughly 1,500 labelled threads before Apps Script's
+6-minute limit stops it; a rerun starts again from the beginning. On a larger
+mailbox it ends with a partial spreadsheet. Use `createLabelSummary()` there,
+or, if you deploy the toolkit, its `fn=backup` route, which records every
+label's thread ids in well under a minute.
+
 ### Step 2: Analyze your labels
 
 ```javascript
@@ -133,7 +140,7 @@ showProgress();
 
 | Function | What it does |
 |----------|-------------|
-| `createBackup()` | Full email inventory to a spreadsheet |
+| `createBackup()` | Inventory of labelled threads to a spreadsheet (up to roughly 1,500) |
 | `createLabelSummary()` | Label counts only |
 | `backupUnreadEmails()` | Unread emails only |
 | `backupDateRange(start, end)` | Specific date range |
