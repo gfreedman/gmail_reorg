@@ -1225,6 +1225,51 @@ function testSweepsAndBackups(results)
 
   // --- library backup ---
 
+  // --- library migration ---
+
+  /**
+   * Build a fake GmailApp holding the given labels by name.
+   *
+   * @param {Object} labelsByName - Fake labels keyed by name
+   * @return {Object} Fake GmailApp recording created labels in .created
+   */
+  function fakeGmailApp(labelsByName)
+  {
+    const gmail = {
+      created: [],
+      getUserLabelByName: function(name)
+      {
+        return Object.prototype.hasOwnProperty.call(labelsByName, name) ? labelsByName[name] : null;
+      },
+      createLabel: function(name)
+      {
+        gmail.created.push(name);
+        return fakeDestLabel(name);
+      }
+    };
+    return gmail;
+  }
+
+  runTest('migrateSingleLabel moves nothing and fails when a page cannot be read', function()
+  {
+    const gmail = fakeGmailApp({Old: fakeListLabel('Old', [], true)});
+    const stats = createBatchStats();
+    const result = migrateSingleLabel('Old', 'New', stats, {gmail: gmail});
+    assert(!result.success, 'An unreadable source must not count as migrated');
+    assertNotNull(result.error, 'Should say why');
+    assertEquals(gmail.created.length, 0, 'Nothing may be created or moved');
+    assertEquals(stats.errors.length, 1, 'The failure is recorded for the batch summary');
+  }, results);
+
+  runTest('migrateSingleLabel counts every thread of a readable label', function()
+  {
+    const gmail = fakeGmailApp({Old: fakeListLabel('Old', [fakeThread('a', ['Old']), fakeThread('b', ['Old'])])});
+    // CONFIG.DRY_RUN is true by default, so this reports without writing.
+    const result = migrateSingleLabel('Old', 'New', createBatchStats(), {gmail: gmail});
+    assert(result.success, 'A readable label migrates');
+    assertEquals(result.threadCount, 2, 'Every thread is counted');
+  }, results);
+
   runTest('collectBackupRows writes a thread under two labels once', function()
   {
     const shared = fakeThread('shared', ['A', 'B']);
