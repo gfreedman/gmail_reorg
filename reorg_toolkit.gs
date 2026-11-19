@@ -5,10 +5,10 @@
 // _private_data.gs, which is git-ignored because it contains personal data.
 // This file is safe to commit and review.
 //
-// Entry point is doGet(e): every mutating route except passFreset is a dry run
-// unless given &apply=1. Mutating routes are idempotent and time-budgeted, so a timed-out
-// run is safe to repeat. passF and backup also save their place and resume;
-// inbox rescans from the start.
+// Entry point is doGet(e): every mutating route is a dry run unless given
+// &apply=1. Mutating routes are idempotent and time-budgeted, so a timed-out
+// run is safe to repeat. backup saves its place and resumes; passF and inbox
+// simply start again, skipping whatever is already filed.
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -24,8 +24,8 @@
 const _PAGE_SIZE = 500;
 
 // Apps Script kills an execution at 6 minutes. Every long-running route stops at
-// CONFIG.MAX_RUNTIME_MS and checkpoints so a re-run resumes, leaving the rest of
-// the buffer to flush output.
+// CONFIG.MAX_RUNTIME_MS, leaving the rest of the buffer to flush output; a re-run
+// then resumes from a saved position or rescans, skipping what is already done.
 const _RUNTIME_MS = (typeof CONFIG !== 'undefined' && CONFIG.MAX_RUNTIME_MS) || 300000;
 
 // Routes that accumulate a large response body (backup_, miscBreakdown_) stop
@@ -79,6 +79,21 @@ function _safeCall(fn, desc, out)
 }
 
 /**
+ * Test whether a set (a plain object of names) holds a key as its own property.
+ *
+ * Plain lookups would find Object.prototype members, so a label named
+ * constructor or toString would look like a member of every set.
+ *
+ * @param {Object} map - Set of names.
+ * @param {string} key - Name to look up.
+ * @return {boolean} True if key is an own property of map.
+ */
+function _hasOwn_(map, key)
+{
+  return Object.prototype.hasOwnProperty.call(map, key);
+}
+
+/**
  * List the filing labels in the plan: every plan label the spam tool does not own.
  *
  * @param {Array<string>} plan - The plan's label names.
@@ -89,7 +104,7 @@ function _filingLabels_(plan, toolLabels)
 {
   return plan.filter(function(name)
   {
-    return !Object.prototype.hasOwnProperty.call(toolLabels, name);
+    return !_hasOwn_(toolLabels, name);
   });
 }
 
@@ -110,7 +125,7 @@ function _unplannedLabels_(userLabelNames, plan, toolLabels)
   });
   return userLabelNames.filter(function(name)
   {
-    return !covered[name] && !Object.prototype.hasOwnProperty.call(toolLabels, name);
+    return !covered[name] && !_hasOwn_(toolLabels, name);
   });
 }
 
@@ -519,25 +534,16 @@ function _passF_dest(fromAddr, allRules)
  */
 function _classifyThread_(thread, toolLabels, suspectLabels)
 {
-  /**
-   * @param {Object} map - Label-name set.
-   * @param {string} key - Label name.
-   * @return {boolean} True if key is an own property of map.
-   */
-  const has = function(map, key)
-  {
-    return Object.prototype.hasOwnProperty.call(map, key);
-  };
   const labels = thread.getLabels();
   let isSuspect = false;
   for (let k = 0; k < labels.length; k++)
   {
     const n = labels[k].getName();
-    if (has(suspectLabels, n))
+    if (_hasOwn_(suspectLabels, n))
     {
       isSuspect = true;
     }
-    else if (!has(toolLabels, n))
+    else if (!_hasOwn_(toolLabels, n))
     {
       return 'filed';
     }
@@ -548,37 +554,95 @@ function _classifyThread_(thread, toolLabels, suspectLabels)
 /**
  * Pass F: file mail the spam tool has seen but that carries no other user label.
  *
- * Runs on an offset checkpoint so a long backlog can be worked through across
- * several invocations.
+ * Works from thread-id sets, not per-thread label reads. It reads each user
+ * label's thread ids once, then looks closely only at SpamChecked threads that
+ * appear in no filing label. Asking each of thousands of threads for its labels
+ * created one Gmail proxy object per label per thread, and Apps Script failed
+ * partway with "Could not locate target object".
+ *
+ * Nothing is saved between runs: after an apply run, filed threads drop out of
+ * the set, so the next run picks up where it stopped. The time budget is
+ * checked after each label read, and before each unfiled thread, since reading
+ * its sender is the slow step.
+ *
+ * Labels are read one after another, not as a snapshot. A thread moved out of a
+ * label mid-read can be missed and get a second label; at a 03:00 run that
+ * window is negligible.
  *
  * @param {Array<string>} out - Accumulator for output lines; returned to the caller as text.
  * @param {boolean} apply - False for a dry run that only reports; true to execute.
- * @param {Object} [deps] - Test injection point: {gw, props, rules, toolLabels,
- *     suspectLabels}. Production omits it.
- * @throws {Error} If deps is supplied without props (see _depProps_).
+ * @param {Object} [deps] - Test injection point: {gw, rules, toolLabels,
+ *     suspectLabels, now}. Production omits it.
  */
 function passF_(out, apply, deps)
 {
-  const startTime = new Date().getTime();
+  const now = _dep_(deps, 'now', function()
+  {
+    return new Date().getTime();
+  });
+  const startTime = now();
   const MAX_RUNTIME = _RUNTIME_MS;
   const gw = _depGw_(deps);
-  const props = _depProps_(deps);
-  out.push((apply ? 'APPLY' : 'DRY-RUN') + ' Pass F — capture SpamChecked-only received mail');
-  out.push('---');
-
-  const sc = gw.getUserLabelByName('SpamChecked');
-  if (!sc)
-  {
-    out.push('No SpamChecked label found');
-    return;
-  }
-
   // The _PASS_*_RULES tables are named after the original reorg passes, which are
   // gone; the sender rules they hold are still current.
   const allRules = _dep_(deps, 'rules',
     [].concat(_MISC_TO, _PASS_F_RULES, _PASS_B_RULES, _PASS_C_LABEL_RULES, _PASS_D_LABEL_RULES));
   const toolLabels = _dep_(deps, 'toolLabels', _SPAM_TOOL_LABELS);
   const suspectLabels = _dep_(deps, 'suspectLabels', _SPAM_SUSPECT_LABELS);
+  out.push((apply ? 'APPLY' : 'DRY-RUN') + ' Pass F — capture SpamChecked-only received mail');
+  out.push('---');
+
+  // Null-prototype sets keyed on thread ids, so an id can never collide with
+  // something on Object.prototype.
+  const filedIds = Object.create(null);
+  const suspectIds = Object.create(null);
+  let sc = null;
+  const userLabels = gw.getUserLabels();
+  for (let i = 0; i < userLabels.length; i++)
+  {
+    const label = userLabels[i];
+    const name = label.getName();
+    if (name === 'SpamChecked')
+    {
+      sc = label;
+    }
+    const target = _hasOwn_(suspectLabels, name) ? suspectIds : (_hasOwn_(toolLabels, name) ? null : filedIds);
+    if (!target)
+    {
+      continue;
+    }
+    // A label that cannot be read would make its threads look unfiled and get
+    // them a second label, so stop rather than guess.
+    let threads;
+    try
+    {
+      threads = getAllThreadsStrict(label);
+    }
+    catch (e)
+    {
+      out.push('ABORT — could not read label "' + name + '": ' + ((e && e.message) || String(e)));
+      out.push('Nothing was labelled. Re-run later.');
+      return;
+    }
+    for (let k = 0; k < threads.length; k++)
+    {
+      target[threads[k].getId()] = true;
+    }
+    // Reading labels leaves no partial progress to keep, so stop with a clear
+    // message rather than run into the hard limit with no output at all.
+    if (now() - startTime > MAX_RUNTIME)
+    {
+      out.push('ABORT — reading labels used the whole time budget.');
+      out.push('Nothing was labelled. Re-run later.');
+      return;
+    }
+  }
+  if (!sc)
+  {
+    out.push('No SpamChecked label found');
+    return;
+  }
+
   // Null-prototype map keyed on label names, so a key can never collide with
   // something on Object.prototype such as __proto__ or constructor.
   const dstCache = Object.create(null);
@@ -595,95 +659,90 @@ function passF_(out, apply, deps)
     return dstCache[name];
   };
 
-  // Resume point between runs. Approximate: new SpamChecked mail lands at the
-  // front and shifts the list, so threads that arrive between runs are only
-  // reached after passFreset. Re-running is safe because filed threads are skipped.
-  let offset = apply ? parseInt(props.getProperty('passF_offset') || '0', 10) : 0;
-  const PAGE = _LABEL_PAGE_SIZE;
+  let scThreads;
+  try
+  {
+    scThreads = getAllThreadsStrict(sc);
+  }
+  catch (e)
+  {
+    out.push('ABORT — could not read SpamChecked: ' + ((e && e.message) || String(e)));
+    out.push('Nothing was labelled. Re-run later.');
+    return;
+  }
+
   let captured = 0;
   let skippedSuspect = 0;
+  let remaining = 0;
   const routeCounts = {};
   const miscDomains = {};
 
-  while (true)
+  for (let i = 0; i < scThreads.length; i++)
   {
-    if (new Date().getTime() - startTime > MAX_RUNTIME)
+    const t = scThreads[i];
+    const id = t.getId();
+    if (filedIds[id])
     {
-      out.push('TIME BUDGET HIT at offset ' + offset + ' — re-run to resume');
-      break;
+      continue; // already in an org bucket — idempotent skip
     }
-    const threads = sc.getThreads(offset, PAGE);
-    if (threads.length === 0)
+    if (suspectIds[id])
     {
-      out.push('Reached end of SpamChecked at offset ' + offset);
-      if (apply)
-      {
-        props.deleteProperty('passF_offset');
-      }
-      break;
+      skippedSuspect++; // leave suspected spam alone
+      continue;
     }
-    for (let i = 0; i < threads.length; i++)
+    if (now() - startTime > MAX_RUNTIME)
     {
-      const t = threads[i];
-      const state = _classifyThread_(t, toolLabels, suspectLabels);
-      if (state === 'filed')
-      {
-        continue; // already in an org bucket — idempotent skip
-      }
-      if (state === 'suspect')
-      {
-        skippedSuspect++; // leave suspected spam alone
-        continue;
-      }
+      remaining++;
+      continue;
+    }
 
-      let from = '';
-      try
+    let from = '';
+    try
+    {
+      from = t.getMessages()[0].getFrom();
+    }
+    catch (e)
+    {
+      // Best-effort: the sender only picks a destination; Misc is the fallback.
+    }
+    const destName = _passF_dest(from, allRules);
+    routeCounts[destName] = (routeCounts[destName] || 0) + 1;
+    captured++;
+    if (destName === 'Misc')
+    {
+      const m = from.match(/@([^>\s]+)/);
+      if (m)
       {
-        from = t.getMessages()[0].getFrom();
-      }
-      catch (e)
-      {
-        // Best-effort: sample text enriches a report, it never gates the run.
-        // Contrast backup_, where a suppressed read would have hidden data loss.
-      }
-      const destName = _passF_dest(from, allRules);
-      routeCounts[destName] = (routeCounts[destName] || 0) + 1;
-      captured++;
-      if (destName === 'Misc')
-      {
-        const m = from.match(/@([^>\s]+)/);
-        if (m)
-        {
-          const d = m[1].toLowerCase();
-          miscDomains[d] = (miscDomains[d] || 0) + 1;
-        }
-      }
-      if (apply)
-      {
-        let dst = getDst(destName);
-        if (!dst)
-        {
-          out.push('  WARN dest missing: ' + destName + ' -> filing under Misc');
-          dst = getDst('Misc');
-        }
-        if (dst)
-        {
-          _safeCall(function()
-          {
-            dst.addToThread(t);
-            return null;
-          }, 'addLabel ' + destName, out);
-        }
+        const d = m[1].toLowerCase();
+        miscDomains[d] = (miscDomains[d] || 0) + 1;
       }
     }
-    offset += threads.length;
     if (apply)
     {
-      props.setProperty('passF_offset', String(offset));
+      let dst = getDst(destName);
+      if (!dst)
+      {
+        out.push('  WARN dest missing: ' + destName + ' -> filing under Misc');
+        dst = getDst('Misc');
+      }
+      if (dst)
+      {
+        _safeCall(function()
+        {
+          dst.addToThread(t);
+          return null;
+        }, 'addLabel ' + destName, out);
+      }
     }
   }
 
   out.push('---');
+  if (remaining > 0)
+  {
+    out.push('TIME BUDGET HIT — ' + remaining + ' unfiled thread(s) not reached' +
+      (apply ? '; re-run to continue' : ''));
+  }
+  out.push('SpamChecked threads: ' + scThreads.length);
   out.push('Captured (SpamChecked-only) this run: ' + captured);
   out.push('Skipped (suspected spam): ' + skippedSuspect);
   out.push('Routing breakdown:');
@@ -708,7 +767,7 @@ function passF_(out, apply, deps)
         out.push('  ' + miscDomains[d] + '  ' + d);
       });
   }
-  out.push((apply ? 'Applied.' : 'Dry-run only.') + ' Re-run safe (idempotent; offset checkpointed).');
+  out.push((apply ? 'Applied.' : 'Dry-run only.') + ' Re-run safe (idempotent).');
 }
 
 // ---- Inbox sweep: ensure every inbox thread carries an org label ----
@@ -1567,7 +1626,7 @@ function _authorized_(e, out)
 /**
  * Web App entry point: route a request to one maintenance function.
  *
- * Every mutating route except passFreset is a dry run unless apply=1. Errors are caught and returned as
+ * Every mutating route is a dry run unless apply=1. Errors are caught and returned as
  * text so a failure is visible in the response rather than only in the log.
  *
  * @param {Object} e - Apps Script event object carrying the query parameters.
@@ -1629,11 +1688,6 @@ function doGet(e)
     else if (fn === 'passF')
     {
       passF_(out, apply);
-    }
-    else if (fn === 'passFreset')
-    {
-      PropertiesService.getScriptProperties().deleteProperty('passF_offset');
-      out.push('passF_offset checkpoint cleared');
     }
     else if (fn === 'inspectSenders')
     {
